@@ -4,11 +4,9 @@
  */
 
 use ZStream;
-use inftrees::Code;
-use inflate::InflateState;
-use inflate::InflateMode;
-use inflate::InflateMode::BAD;
-use inflate::InflateMode::TYPE;
+use super::Code;
+use super::InflateState;
+use super::InflateMode;
 use std::slice::bytes::copy_memory;
 use std::char;
 
@@ -100,7 +98,7 @@ fn copy_within_output_buffer(buf: &mut [u8], dstpos: uint, srcpos: uint, len: ui
     // the source region must be at lower indices than the dest region
 
     debug_assert!(srcpos <= dstpos);
-    
+
     let src_end = srcpos + len;
 
     if src_end <= dstpos {
@@ -214,7 +212,7 @@ pub fn inflate_fast(
                 if op == 0 {
                     // literal
                     // debug!("(dolen): consumed {:2} bits, {:2} bits left, output literal byte: 0x{:2x}", here.bits, input.bits, here.val);
-                    
+
                     if here.val >= 0x20 && here.val < 0x7f {
                         Tracevv!("inflate:         literal '{}'", char::from_u32(here.val as u32).unwrap());
                     }
@@ -259,22 +257,22 @@ pub fn inflate_fast(
                     // end-of-block
                     // debug!("inflate: end of block");
                     Tracevv!("inflate:         end of block");
-                    state.mode = TYPE;
+                    state.mode = InflateMode::TYPE;
                     break;
                 }
                 else {
                     strm.msg = Some("invalid literal/length code".to_string());
-                    state.mode = BAD;
+                    state.mode = InflateMode::BAD;
                     break;
                 }
-    
+
                 if input.pos >= last {
                     debug!("reached end of input; halting");
-                    break; 
+                    break;
                 }
                 if out.pos >= end {
                     debug!("reached end of output; halting");
-                    break; 
+                    break;
                 }
                 InflateFastState::Start
             }
@@ -326,7 +324,7 @@ pub fn inflate_fast(
                         if maxout > whave {
                             if state.sane {
                                 strm.msg = Some("invalid distance too far back".to_string());
-                                state.mode = BAD;
+                                state.mode = InflateMode::BAD;
                                 break;
                             }
     /*#ifdef INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR
@@ -430,7 +428,7 @@ pub fn inflate_fast(
                                         out.buf.slice_mut(out.pos, out.pos + maxout),
                                         from.buf.slice(from.pos, from.pos + maxout));
                                     out.pos += maxout;
-                                    
+
                                     /* rest from output */
                                     copy_within_output_buffer(out.buf, out.pos, out.pos - dist, len);
                                 }
@@ -489,14 +487,14 @@ pub fn inflate_fast(
                         // note: this can legally be a self-overlapping copy!
                         while len > 0 {
                             out.buf[out.pos] = out.buf[out.pos - dist];
-                            out.pos += 1;                        
+                            out.pos += 1;
                             len -= 1;
                         }
 
                         Tracevv!("out.pos: {}, input.pos: {}, bits: {}, hold: 0x{:08x}", out.pos - strm.next_out, input.pos - strm.next_in, input.bits, input.hold);
                     }
                 }
-                else if (op & 64) == 0 {          
+                else if (op & 64) == 0 {
                     // 2nd level distance code
                     debug!("second-level distance code");
                     here = codes[dcode + (here.val as uint + (input.hold & ((1 << op) - 1)) as uint)];
@@ -506,13 +504,13 @@ pub fn inflate_fast(
                 }
                 else {
                     strm.msg = Some("invalid distance code".to_string());
-                    state.mode = BAD;
+                    state.mode = InflateMode::BAD;
                     break;
                 }
                 InflateFastState::Start
             }
         };
-    
+
         match st {
             InflateFastState::Start => {
                 Tracevv!("last - in = {}", (last as int) - (input.pos as int));

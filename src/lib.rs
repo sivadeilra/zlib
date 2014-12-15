@@ -21,8 +21,6 @@ pub macro_rules! Tracevv {
 
 mod adler32;
 pub mod inflate;
-mod inffast;
-mod inftrees;
 mod statictrees;
 mod treedefs;
 
@@ -33,29 +31,29 @@ mod treedefs;
 
 
 /// Maximum heap size
-pub const HEAP_SIZE :uint = 2 * L_CODES + 1;
+const HEAP_SIZE :uint = 2 * L_CODES + 1;
 
 /// Size of bit buffer in bi_buf
-pub const BUF_SIZE :uint = 16;
+const BUF_SIZE :uint = 16;
 
-pub const INIT_STATE    :uint = 42;
-pub const EXTRA_STATE   :uint = 69;
-pub const NAME_STATE    :uint = 73;
-pub const COMMENT_STATE :uint = 91;
-pub const HCRC_STATE    :uint = 103;
-pub const BUSY_STATE    :uint = 113;
-pub const FINISH_STATE  :uint = 666;
+const INIT_STATE    :uint = 42;
+const EXTRA_STATE   :uint = 69;
+const NAME_STATE    :uint = 73;
+const COMMENT_STATE :uint = 91;
+const HCRC_STATE    :uint = 103;
+const BUSY_STATE    :uint = 113;
+const FINISH_STATE  :uint = 666;
 /* Stream status */
 
 
 /* A Pos is an index in the character window. We use short instead of int to
  * save space in the various tables. IPos is used only for parameter passing.
  */
-pub type Pos = u16;
-pub type Posf = u16;    // replace with Pos
-pub type IPos = u32;
+type Pos = u16;
+type Posf = u16;    // replace with Pos
+type IPos = u32;
 
-pub struct InternalState {
+struct InternalState {
     status :uint,        /* as the name implies */
     pending_buf :Vec<u8>,  /* output still pending */
     pending_buf_size: uint, /* size of pending_buf */    // use pending_buf.len()
@@ -604,7 +602,7 @@ struct TreeDesc {
 }
 
 #[deriving(Copy)]
-pub struct TreeRef {
+struct TreeRef {
     pub codes: &'static [u16],
     pub lengths: &'static [u8],
 }

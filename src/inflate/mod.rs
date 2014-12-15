@@ -3,9 +3,9 @@
 use std::slice::bytes::copy_memory;
 use crc32::crc32;
 use adler32::adler32;
-use super::inffast::inflate_fast;
-use inffast::BufPos;
-use inftrees::{ENOUGH,LENS,DISTS,CODES,Code,inflate_table};
+use self::inffast::inflate_fast;
+use self::inffast::BufPos;
+use self::inftrees::inflate_table;
 
 use GZipHeader;
 use ZStream;
@@ -15,6 +15,70 @@ use {Z_DEFLATED,Z_BLOCK,Z_TREES,Z_FINISH};
 
 const DEFAULT_DMAX: uint = 32768;
 
+mod inffast;
+mod inftrees;
+
+/* Structure for decoding tables.  Each entry provides either the
+   information needed to do the operation requested by the code that
+   indexed that table entry, or it provides a pointer to another
+   table that indexes more bits of the code.  op indicates whether
+   the entry is a pointer to another table, a literal, a length or
+   distance, an end-of-block, or an invalid code.  For a table
+   pointer, the low four bits of op is the number of index bits of
+   that table.  For a length or distance, the low four bits of op
+   is the number of extra bits to get after the code.  bits is
+   the number of bits in this code or part of the code to drop off
+   of the bit buffer.  val is the actual byte to output in the case
+   of a literal, the base length or distance, or the offset from
+   the current table to the next table.  Each entry is four bytes. */
+#[deriving(Copy)]
+struct Code  // was 'code'
+{
+    op: u8,           /* operation, extra bits, table bits */
+    bits: u8,         /* bits in this part of the code */
+    val: u16,         /* offset in table or code value */
+}
+
+impl Code
+{
+    pub fn new() -> Code
+    {
+        Code { op: 0, bits: 0, val: 0 }
+    }
+}
+
+/* op values as set by inflate_table():
+    00000000 - literal
+    0000tttt - table link, tttt != 0 is the number of table index bits
+    0001eeee - length or distance, eeee is the number of extra bits
+    01100000 - end of block
+    01000000 - invalid code
+ */
+
+/* Maximum size of the dynamic table.  The maximum number of code structures is
+   1444, which is the sum of 852 for literal/length codes and 592 for distance
+   codes.  These values were found by exhaustive searches using the program
+   examples/enough.c found in the zlib distribtution.  The arguments to that
+   program are the number of symbols, the initial root table size, and the
+   maximum bit length of a code.  "enough 286 9 15" for literal/length codes
+   returns returns 852, and "enough 30 6 15" for distance codes returns 592.
+   The initial root table size (9 or 6) is found in the fifth argument of the
+   inflate_table() calls in inflate.c and infback.c.  If the root table size is
+   changed, then these maximum sizes would be need to be recalculated and
+   updated. */
+const ENOUGH_LENS :uint = 852;
+const ENOUGH_DISTS :uint = 592;
+const ENOUGH :uint = ENOUGH_LENS + ENOUGH_DISTS;
+
+/* Type of code to build for inflate_table() */
+// enum codetype {
+type CodeType = u8;
+    pub const CODES: u8 = 0;
+    pub const LENS: u8 = 1;
+    pub const DISTS: u8 = 2;
+// }
+
+/// Describes the results of calling `inflate()`.
 #[deriving(Copy)]
 pub enum InflateResult
 {
@@ -103,51 +167,51 @@ pub enum InflateMode {
 /* state maintained between inflate() calls.  Approximately 10K bytes. */
 pub struct InflateState // was inflate_state
 {
-    pub mode: InflateMode,          // current inflate mode
-    pub last: bool,                 // true if processing last block
-    pub wrap: u32,                  // bit 0 true for zlib, bit 1 true for gzip
-    pub havedict: bool,             // true if dictionary provided
-    pub flags: u32,                 // gzip header method and flags (0 if zlib)
-    pub dmax: uint,                 // zlib header max distance (INFLATE_STRICT)
-    pub check: u32,                 // protected copy of check value
-    pub total: uint,                // protected copy of output count
-    pub head: Option<GZipHeader>,   // where to save gzip header information
+    mode: InflateMode,              // current inflate mode
+    last: bool,                 // true if processing last block
+    wrap: u32,                  // bit 0 true for zlib, bit 1 true for gzip
+    havedict: bool,             // true if dictionary provided
+    flags: u32,                 // gzip header method and flags (0 if zlib)
+    dmax: uint,                 // zlib header max distance (INFLATE_STRICT)
+    check: u32,                 // protected copy of check value
+    total: uint,                // protected copy of output count
+    head: Option<GZipHeader>,   // where to save gzip header information
 
     // sliding window
-    pub wbits: uint,                // log base 2 of requested window size
-    pub wsize: uint,                // window size or zero if not using window
-    pub whave: uint,                // valid bytes in the window
-    pub wnext: uint,                // window write index
-    pub window: Vec<u8>,            // allocated sliding window, if needed
+    wbits: uint,                // log base 2 of requested window size
+    wsize: uint,                // window size or zero if not using window
+    whave: uint,                // valid bytes in the window
+    wnext: uint,                // window write index
+    window: Vec<u8>,            // allocated sliding window, if needed
 
     // bit accumulator
-    pub hold: u32,                  // input bit accumulator
-    pub bits: uint,                 // number of bits in "in"
+    hold: u32,                  // input bit accumulator
+    bits: uint,                 // number of bits in "in"
 
     // for string and stored block copying
-    pub length: uint,               // literal or length of data to copy
-    pub offset: uint,               // distance back to copy string from
+    length: uint,               // literal or length of data to copy
+    offset: uint,               // distance back to copy string from
 
     // for table and code decoding
-    pub extra: uint,                // extra bits needed
+    extra: uint,                // extra bits needed
 
     // fixed and dynamic code tables
-    pub lencode: uint,              // starting table for length/literal codes       // index into 'codes'
-    pub distcode: uint,             // starting table for distance codes        // index into 'codes'
-    pub lenbits: uint,              // index bits for lencode
-    pub distbits: uint,             // index bits for distcode
+    lencode: uint,              // starting table for length/literal codes       // index into 'codes'
+    distcode: uint,             // starting table for distance codes        // index into 'codes'
+    lenbits: uint,              // index bits for lencode
+    distbits: uint,             // index bits for distcode
 
     // dynamic table building
-    pub ncode: uint,                // number of code length code lengths
-    pub nlen: uint,                 // number of length code lengths
-    pub ndist: uint,                // number of distance code lengths
-    pub have: uint,                 // number of code lengths in lens[]
-    pub next: uint,                 // next available space in codes[]   // index into codes[]
-    pub lens: [u16, ..320],         // temporary storage for code lengths
-    pub work: [u16, ..288],         // work area for code table building
-    pub codes: [Code, ..ENOUGH],    // space for code tables
-    pub sane: bool,                  // if false, allow invalid distance too far
-    pub back: uint,                  // bits back of last unprocessed length/lit
+    ncode: uint,                // number of code length code lengths
+    nlen: uint,                 // number of length code lengths
+    ndist: uint,                // number of distance code lengths
+    have: uint,                 // number of code lengths in lens[]
+    next: uint,                 // next available space in codes[]   // index into codes[]
+    lens: [u16, ..320],         // temporary storage for code lengths
+    work: [u16, ..288],         // work area for code table building
+    codes: [Code, ..ENOUGH],        // space for code tables
+    pub sane: bool,                 // if false, allow invalid distance too far
+    pub back: uint,                 // bits back of last unprocessed length/lit
     pub was: uint,                  // initial length of match
 }
 
@@ -409,7 +473,7 @@ pub fn inflate_prime(strm: &mut ZStream, state: &mut InflateState, bits: int, va
 // exchange for a little execution time.  However, BUILDFIXED should not be
 // used for threaded applications, since the rewriting of the tables and virgin
 // may not be thread-safe.
-pub fn fixedtables(strm: &mut ZStream, state: &mut InflateState)
+fn fixedtables(strm: &mut ZStream, state: &mut InflateState)
 {
     debug!("fixedtables");
 
