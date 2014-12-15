@@ -1,0 +1,67 @@
+
+#    -C prefer-dynamic \
+
+
+RFLAGS = \
+    -A dead_code \
+    -A unused_variables \
+    -A unused_assignments \
+    -A unreachable_code \
+
+RUSTC = c:\rust\bin\rustc.exe
+
+OFILTER = c:\perl64\bin\perl.exe
+
+
+CRC32TABLES = crc32tables.rs
+STATICTREES = statictrees.rs
+
+FINAL_ZLIBDLL = ..\x64\Debug\zlib.dll
+
+
+ALL = \
+    zlib.dll \
+    zlib.lib \
+    $(FINAL_ZLIBDLL) \
+    zlibtest.exe \
+
+
+# ALL = test.exe
+# ALL = dom.exe
+
+all: $(ALL)
+    echo ALL = $(ALL)
+
+$(FINAL_ZLIBDLL): zlib.dll
+    echo Copying zlib.dll
+    copy /y zlib.dll $(FINAL_ZLIBDLL)
+
+crc32tables.rs: crc32gen_file.rs
+    $(RUSTC) $(RFLAGS) crc32gen_file.rs
+    .\crc32gen_file.exe crc32tables.rs
+
+statictrees.rs: treedefs.rs treegen.rs treegencode.rs
+    $(RUSTC) $(RFLAGS) treegencode.rs
+    .\treegencode.exe statictrees.rs
+
+libzlib.rlib zlib.dll: makefile.txt libcrc32.rlib zlib.rs treedefs.rs statictrees.rs inflate.rs inftrees.rs adler32.rs inffast.rs zlibdll.rs
+    $(RUSTC) $(RFLAGS) -L . --crate-type rlib,dylib zlib.rs
+
+
+zlib.lib zlib.exp: zlib.def
+    lib /nologo /machine:x64 /def:zlib.def /out:zlib.lib
+
+zlibtest.exe: zlib.dll zlibtest.rs makefile.txt
+    $(RUSTC) $(RFLAGS) -L . zlibtest.rs
+
+libcrc32.rlib: crc32.rs crc32tables.rs
+    $(RUSTC) $(RFLAGS) --crate-type rlib crc32.rs
+
+libcrc32.a: crc32.rs crc32tables.rs
+    $(RUSTC) $(RFLAGS) --crate-type staticlib crc32.rs
+
+testcrc32.exe: testcrc32.rs libcrc32.rlib
+    $(RUSTC) $(RFLAGS) -L . testcrc32.rs 
+
+# test.exe: test.rs libcrc32.rlib
+#     $(RUSTC) $(RFLAGS) -L . test.rs 
