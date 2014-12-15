@@ -1,12 +1,17 @@
+
+// Copyright (C) 1995-2009 Mark Adler
+// For conditions of distribution and use, see copyright notice in zlib.h
+
 // http://www.gzip.org/zlib/rfc-gzip.html
 
 use std::slice::bytes::copy_memory;
+
 use crc32::crc32;
 use adler32::adler32;
 use self::inffast::inflate_fast;
 use self::inffast::BufPos;
 use self::inftrees::inflate_table;
-
+use std::default::Default;
 use GZipHeader;
 use ZStream;
 use DEF_WBITS;
@@ -18,54 +23,49 @@ const DEFAULT_DMAX: uint = 32768;
 mod inffast;
 mod inftrees;
 
-/* Structure for decoding tables.  Each entry provides either the
-   information needed to do the operation requested by the code that
-   indexed that table entry, or it provides a pointer to another
-   table that indexes more bits of the code.  op indicates whether
-   the entry is a pointer to another table, a literal, a length or
-   distance, an end-of-block, or an invalid code.  For a table
-   pointer, the low four bits of op is the number of index bits of
-   that table.  For a length or distance, the low four bits of op
-   is the number of extra bits to get after the code.  bits is
-   the number of bits in this code or part of the code to drop off
-   of the bit buffer.  val is the actual byte to output in the case
-   of a literal, the base length or distance, or the offset from
-   the current table to the next table.  Each entry is four bytes. */
-#[deriving(Copy)]
-struct Code  // was 'code'
+// Structure for decoding tables.  Each entry provides either the
+// information needed to do the operation requested by the code that
+// indexed that table entry, or it provides a pointer to another
+// table that indexes more bits of the code.  op indicates whether
+// the entry is a pointer to another table, a literal, a length or
+// distance, an end-of-block, or an invalid code.  For a table
+// pointer, the low four bits of op is the number of index bits of
+// that table.  For a length or distance, the low four bits of op
+// is the number of extra bits to get after the code.  bits is
+// the number of bits in this code or part of the code to drop off
+// of the bit buffer.  val is the actual byte to output in the case
+// of a literal, the base length or distance, or the offset from
+// the current table to the next table.  Each entry is four bytes.
+#[deriving(Copy,Default)]
+struct Code
 {
-    op: u8,           /* operation, extra bits, table bits */
-    bits: u8,         /* bits in this part of the code */
-    val: u16,         /* offset in table or code value */
+    // operation, extra bits, table bits
+    // op values as set by inflate_table():
+    // 00000000 - literal
+    // 0000tttt - table link, tttt != 0 is the number of table index bits
+    // 0001eeee - length or distance, eeee is the number of extra bits
+    // 01100000 - end of block
+    // 01000000 - invalid code
+    op: u8,
+
+    /// bits in this part of the code
+    bits: u8,
+
+    /// offset in table or code value
+    val: u16,
 }
 
-impl Code
-{
-    pub fn new() -> Code
-    {
-        Code { op: 0, bits: 0, val: 0 }
-    }
-}
-
-/* op values as set by inflate_table():
-    00000000 - literal
-    0000tttt - table link, tttt != 0 is the number of table index bits
-    0001eeee - length or distance, eeee is the number of extra bits
-    01100000 - end of block
-    01000000 - invalid code
- */
-
-/* Maximum size of the dynamic table.  The maximum number of code structures is
-   1444, which is the sum of 852 for literal/length codes and 592 for distance
-   codes.  These values were found by exhaustive searches using the program
-   examples/enough.c found in the zlib distribtution.  The arguments to that
-   program are the number of symbols, the initial root table size, and the
-   maximum bit length of a code.  "enough 286 9 15" for literal/length codes
-   returns returns 852, and "enough 30 6 15" for distance codes returns 592.
-   The initial root table size (9 or 6) is found in the fifth argument of the
-   inflate_table() calls in inflate.c and infback.c.  If the root table size is
-   changed, then these maximum sizes would be need to be recalculated and
-   updated. */
+// Maximum size of the dynamic table.  The maximum number of code structures is
+// 1444, which is the sum of 852 for literal/length codes and 592 for distance
+// codes.  These values were found by exhaustive searches using the program
+// examples/enough.c found in the zlib distribtution.  The arguments to that
+// program are the number of symbols, the initial root table size, and the
+// maximum bit length of a code.  "enough 286 9 15" for literal/length codes
+// returns returns 852, and "enough 30 6 15" for distance codes returns 592.
+// The initial root table size (9 or 6) is found in the fifth argument of the
+// inflate_table() calls in inflate.c and infback.c.  If the root table size is
+// changed, then these maximum sizes would be need to be recalculated and
+// updated.
 const ENOUGH_LENS :uint = 852;
 const ENOUGH_DISTS :uint = 592;
 const ENOUGH :uint = ENOUGH_LENS + ENOUGH_DISTS;
@@ -88,10 +88,6 @@ pub enum InflateResult
     NeedOutput,             // could decode more, but need more output buffer space
     InvalidData,            // input data is malformed, decoding has halted
 }
-
-// inflate.h -- internal inflate state definition
-// Copyright (C) 1995-2009 Mark Adler
-// For conditions of distribution and use, see copyright notice in zlib.h
 
 // /* define NO_GZIP when compiling if you want to disable gzip header and
 //    trailer decoding by inflate().  NO_GZIP would be used to avoid linking in
@@ -164,7 +160,8 @@ pub enum InflateMode {
         CHECK -> LENGTH -> DONE
  */
 
-/* state maintained between inflate() calls.  Approximately 10K bytes. */
+/// Defines the state needed to inflate (decompress) a stream.
+/// Use InflateState::new() to create a stream.
 pub struct InflateState // was inflate_state
 {
     mode: InflateMode,              // current inflate mode
@@ -210,9 +207,9 @@ pub struct InflateState // was inflate_state
     lens: [u16, ..320],         // temporary storage for code lengths
     work: [u16, ..288],         // work area for code table building
     codes: [Code, ..ENOUGH],        // space for code tables
-    pub sane: bool,                 // if false, allow invalid distance too far
-    pub back: uint,                 // bits back of last unprocessed length/lit
-    pub was: uint,                  // initial length of match
+    sane: bool,                 // if false, allow invalid distance too far
+    back: uint,                 // bits back of last unprocessed length/lit
+    was: uint,                  // initial length of match
 }
 
 pub const WINDOW_BITS_MIN: uint = 8;
@@ -274,7 +271,7 @@ impl InflateState
             next: 0,                    // next available space in codes[]   // index into codes[]
             lens: [0u16, ..320],        // temporary storage for code lengths
             work: [0u16, ..288],        // work area for code table building
-            codes: [Code::new(), ..ENOUGH],    // space for code tables
+            codes: [Default::default(), ..ENOUGH],    // space for code tables
             sane: false,                // if false, allow invalid distance too far
             back: 0,                    // bits back of last unprocessed length/lit
             was: 0,                     // initial length of match
@@ -477,7 +474,7 @@ fn fixedtables(strm: &mut ZStream, state: &mut InflateState)
 {
     debug!("fixedtables");
 
-    let mut fixed: [Code, ..544] = [Code::new(), ..544];
+    let mut fixed: [Code, ..544] = [Default::default(), ..544];
 
     // build fixed huffman tables
 
@@ -490,7 +487,7 @@ fn fixedtables(strm: &mut ZStream, state: &mut InflateState)
         while sym < 288 { state.lens[sym] = 8; sym += 1; }
     }
 
-    let mut next :uint = 0;         // index into 'fixed' table
+    let mut next :uint = 0;     // index into 'fixed' table
     let lenfix: uint = 0;       // index into 'fixed' table
     let (err, bits) = inflate_table(LENS, &state.lens, 288, &mut fixed, &mut next, 9, state.work.as_mut_slice());
     assert!(err == 0);
@@ -667,8 +664,10 @@ fn update(flags: u32, check: u32, data: &[u8]) -> u32
 // #ifdef GUNZIP
 // #  define CRC2(check, word) \
 
-// was CRC2
-fn crc2(check: u32, word: u32) -> u32       // returns 'check'
+// Computes a CRC over two bytes.  The bytes are stored in a u32 value.
+// The bits are packed in "little-endian" form; byte[0] is in bits [0..7],
+// while byte[1] is in bits [8..15].
+fn crc2(check: u32, word: u32) -> u32
 {
     let mut hbuf :[u8, ..2] = [0, ..2];
     hbuf[0] = (word & 0xff) as u8;
@@ -676,6 +675,9 @@ fn crc2(check: u32, word: u32) -> u32       // returns 'check'
     return crc32(check, &hbuf);
 }
 
+// Computes a CRC over four bytes.  The bytes are stored in a u32 value.
+// The bits are packed in "little-endian" form; byte[0] is in bits [0..7],
+// while byte[1] is in bits [8..15], etc.
 fn crc4(check: u32, word: u32) -> u32
 {
     let mut hbuf = [0u8, ..4];
@@ -688,6 +690,7 @@ fn crc4(check: u32, word: u32) -> u32
 
 /* Load registers with state in inflate() for speed */
 // was LOAD
+#[inline]
 fn load_locals(loc: &mut InflateLocals) {
     loc.put = loc.strm.next_out;
     loc.left = loc.strm.avail_out;
@@ -702,6 +705,7 @@ fn load_locals(loc: &mut InflateLocals) {
 
 /* Restore state from registers in inflate() */
 // was RESTORE
+#[inline]
 fn restore_locals(loc: &mut InflateLocals) {
     debug!("restore_locals: put: {} left: {} next: {} have: {} hold: {} bits: {}",
         loc.put, loc.left, loc.next, loc.have, loc.hold, loc.bits);
@@ -724,14 +728,14 @@ macro_rules! BADINPUT {
     }
 }
 
-/* Clear the input bit accumulator */
+// Clear the input bit accumulator
 fn initbits(loc: &mut InflateLocals) {
     loc.hold = 0;
     loc.bits = 0;
 }
 
-/* Get a byte of input into the bit accumulator, or return from inflate()
-   if there is no input available. */
+// Get a byte of input into the bit accumulator, or return from inflat
+// if there is no input available.
 macro_rules! PULLBYTE {
     ($loc:expr) => {
         {
@@ -749,8 +753,8 @@ macro_rules! PULLBYTE {
     }
 }
 
-/* Assure that there are at least n bits in the bit accumulator.  If there is
-   not enough available input to do that, then return from inflate(). */
+// Assure that there are at least n bits in the bit accumulator.  If there is
+// not enough available input to do that, then return from inflate(). */
 macro_rules! NEEDBITS {
     ($loc:expr, $n:expr) => {
         {
@@ -888,11 +892,9 @@ struct InflateLocals<'a>
     left :uint,         // available output
     hold :u32,          // bit buffer
     bits :uint,         // bits in bit buffer
-
-    next: uint,    // z_const unsigned char FAR *next;    /* next input */ // index into input_buffer
-    put: uint,  // unsigned char FAR *put;     /* next output */ // index into output_buffer
-
-    in_ :uint,           // save starting available input
+    next: uint,         // next input; is an index into input_buffer
+    put: uint,          // next output; is an index into output_buffer
+    in_ :uint,          // save starting available input
     out :uint,          // save starting available output
 
     flush: u32
@@ -925,7 +927,6 @@ pub fn inflate<'a>(
     let loc = &mut locs;
 
     let mut copy: uint;         // number of stored or match bytes to copy
-    // unsigned char FAR *from;    // where to copy match bytes from
     let mut here: Code;         // current decoding table entry
     let mut last: Code;         // parent table entry
     let mut len: uint;          // length to copy for repeats, bits to drop

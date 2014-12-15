@@ -574,20 +574,20 @@ impl ZStream
  * Constants
  */
 
+/// Bit length codes must not exceed `MAX_BL_BITS` bits
 const MAX_BL_BITS :uint = 7;
-/* Bit length codes must not exceed MAX_BL_BITS bits */
 
+/// End of block literal code
 const END_BLOCK :uint = 256;
-/* end of block literal code */
 
+/// Repeat previous bit length 3-6 times (2 bits of repeat count)
 const REP_3_6 :uint = 16;
-/* repeat previous bit length 3-6 times (2 bits of repeat count) */
 
+/// Repeat a zero length 3-10 times  (3 bits of repeat count)
 const REPZ_3_10 :uint = 17;
-/* repeat a zero length 3-10 times  (3 bits of repeat count) */
 
+/// Repeat a zero length 11-138 times  (7 bits of repeat count)
 const REPZ_11_138 :uint = 18;
-/* repeat a zero length 11-138 times  (7 bits of repeat count) */
 
 // from trees.c
 
