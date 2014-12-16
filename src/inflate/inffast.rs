@@ -133,12 +133,14 @@ pub fn inflate_fast(
     output_buffer: &mut [u8],
     strm_next_in: &mut uint,
     strm_avail_in: &mut uint,
+    strm_next_out: &mut uint,
+    strm_avail_out: &mut uint,
     start: uint)                 /* inflate()'s starting value for strm.avail_out */
 {
     // copy state to local variables
-    let mut out = BufPosMut { buf: output_buffer, pos: strm.next_out };
-    let beg :uint = out.pos - (start - strm.avail_out);     // inflate()'s initial strm.next_out
-    let end :uint = out.pos + (strm.avail_out - 257);       // while out < end, enough space available
+    let mut out = BufPosMut { buf: output_buffer, pos: *strm_next_out };
+    let beg :uint = out.pos - (start - *strm_avail_out);     // inflate()'s initial strm.next_out
+    let end :uint = out.pos + (*strm_avail_out - 257);       // while out < end, enough space available
 // #ifdef INFLATE_STRICT
     let dmax: uint = state.dmax;                    // maximum distance from zlib header
 // #endif
@@ -493,7 +495,7 @@ pub fn inflate_fast(
                             len -= 1;
                         }
 
-                        Tracevv!("out.pos: {}, input.pos: {}, bits: {}, hold: 0x{:08x}", out.pos - strm.next_out, input.pos - strm.next_in, input.bits, input.hold);
+                        Tracevv!("out.pos: {}, input.pos: {}, bits: {}, hold: 0x{:08x}", out.pos - *strm_next_out, input.pos - *strm_next_in, input.bits, input.hold);
                     }
                 }
                 else if (op & 64) == 0 {
@@ -543,24 +545,23 @@ pub fn inflate_fast(
 
     // we expect to have advanced state
     debug!("    input.pos = {}, strm.next_in = {}", input.pos, *strm_next_in);
-    assert!(input.pos > *strm_next_in || out.pos > strm.next_out);
+    assert!(input.pos > *strm_next_in || out.pos > *strm_next_out);
 
     // update state and return
     *strm_next_in = input.pos;
-    strm.next_out = out.pos;
+    *strm_next_out = out.pos;
     *strm_avail_in = if input.pos < last { 5 + (last - input.pos) } else { 5 - (input.pos - last) };
-    strm.avail_out = if out.pos < end { 257 + (end - out.pos) } else { 257 - (out.pos - end) };
+    *strm_avail_out = if out.pos < end { 257 + (end - out.pos) } else { 257 - (out.pos - end) };
     state.hold = input.hold;
     state.bits = input.bits;
 
     debug!("done.  strm {{ next_in: {}, next_out: {}, avail_in: {}, avail_out: {} }}",
         *strm_next_in,
-        strm.next_out,
+        *strm_next_out,
         *strm_avail_in,
-        strm.avail_out);
+        *strm_avail_out);
 
     Tracevv!("done.  avail_in: {}, avail_out: {}", strm.avail_in, strm.avail_out);
-
 }
 
 /*

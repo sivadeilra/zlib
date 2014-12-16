@@ -1,6 +1,10 @@
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 #![feature(phase)]
 #[phase(plugin, link)] extern crate log;
 extern crate zlib;
+
 
 use std::fmt::Show;
 use std::io;
@@ -93,14 +97,10 @@ fn test_inflate(in_bufsize: uint, out_bufsize: uint)
             println!("loaded {} input bytes", bytes_read);
         }
 
-        // give it some output buffer
-        strm.avail_out = out_data.len();
-        strm.next_out = 0;
-
         let total_out: u64 = strm.total_out;
 
         match state.inflate(&mut strm, None, input_buffer.slice_from(input_pos), out_data) {
-            InflateResult::Eof(crc) => {
+            InflateResult::Eof(_) => {
                 println!("Eof");
                 break;
             }
@@ -112,13 +112,13 @@ fn test_inflate(in_bufsize: uint, out_bufsize: uint)
 
             InflateResult::Decoded(input_bytes_read, output_bytes_written) => {
                 // println!("InflateDecoded: input_bytes_read: {} output_bytes_written: {}", input_bytes_read, output_bytes_written);                
-                println!("zlibtest: next_out = {}, avail_out = {}", strm.next_out, strm.avail_out);
+                println!("zlibtest: input_bytes_read = {}, output_bytes_written = {}", input_bytes_read, output_bytes_written);
 
                 assert!(input_bytes_read + input_pos <= input_buffer.len());
                 input_pos += input_bytes_read;
 
                 // Check the data that we just received against the same data in the known-good file.
-                if (output_bytes_written != 0) {
+                if output_bytes_written != 0 {
                 	assert!(check_buffer.len() == 0);
                 	let check_bytes_read = check_file.push(output_bytes_written, &mut check_buffer).unwrap();
                 	assert!(check_bytes_read == output_bytes_written);
@@ -132,7 +132,7 @@ fn test_inflate(in_bufsize: uint, out_bufsize: uint)
                 }
 
                 loop_count += 1;
-                if loop_count >= 4 {
+                if loop_count >= 4000 {
                     println!("stopping");
                     break;
                 }
@@ -151,7 +151,6 @@ fn test_inflate(in_bufsize: uint, out_bufsize: uint)
 
     }
 }
-
 
 #[test]
 fn test_inflate_reader_basic()
@@ -191,7 +190,7 @@ fn test_inflate_reader(in_bufsize: uint, out_bufsize: uint)
                 println!("inflate reader returned {} bytes", output_bytes_written);
 
                 // Check the data that we just received against the same data in the known-good file.
-                if (output_bytes_written != 0) {
+                if output_bytes_written != 0 {
                 	assert!(check_buffer.len() == 0);
                 	let check_bytes_read = check_file.push(output_bytes_written, &mut check_buffer).unwrap();
                 	assert!(check_bytes_read == output_bytes_written);

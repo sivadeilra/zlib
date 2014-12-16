@@ -33,9 +33,10 @@ mod reader;
 macro_rules! BADINPUT {
     ($loc:expr, $msg:expr) => {
         {
+panic!("bad input, total_in={}: {}", $loc.strm.total_in, $msg); /* TEMPORARY
             $loc.strm.msg = Some($msg.to_string());
             $loc.state.mode = InflateMode::BAD;
-            return inf_leave($loc);
+            return inf_leave($loc); */
         }
     }
 }
@@ -46,7 +47,6 @@ macro_rules! PULLBYTE {
     ($loc:expr) => {
         {
             if $loc.have == 0 {
-                debug!("PULLBYTE: bailing because we have no input data");
                 return inf_leave($loc);
             }
             $loc.have -= 1;
@@ -54,7 +54,6 @@ macro_rules! PULLBYTE {
             $loc.hold += b as u32 << $loc.bits;
             $loc.next += 1;
             $loc.bits += 8;
-            // debug!("PULLBYTE: 0x{:2x} {:3}, have: {} hold: {:8x} next: {} bits: {}", b, b, $loc.have, $loc.hold, $loc.next, $loc.bits);
         }
     }
 }
@@ -65,10 +64,9 @@ macro_rules! NEEDBITS {
     ($loc:expr, $n:expr) => {
         {
             let n :uint = $n;
-            while ($loc.bits as uint) < n {
+            while $loc.bits < n {
                 PULLBYTE!($loc);
             }
-            // debug!("NEEDBITS: got {} bits", n);
         }
     }
 }
@@ -233,7 +231,7 @@ pub struct InflateState // was inflate_state
 
     // bit accumulator
     hold: u32,                  // input bit accumulator
-    bits: uint,                 // number of bits in "in"
+    bits: uint,                 // number of bits in "hold"
 
     // for string and stored block copying
     length: uint,               // literal or length of data to copy
@@ -243,8 +241,8 @@ pub struct InflateState // was inflate_state
     extra: uint,                // extra bits needed
 
     // fixed and dynamic code tables
-    lencode: uint,              // starting table for length/literal codes       // index into 'codes'
-    distcode: uint,             // starting table for distance codes        // index into 'codes'
+    lencode: uint,              // starting table for length/literal codes; is an index into 'codes'
+    distcode: uint,             // starting table for distance codes; is an index into 'codes'
     lenbits: uint,              // index bits for lencode
     distbits: uint,             // index bits for distcode
 
@@ -256,7 +254,7 @@ pub struct InflateState // was inflate_state
     next: uint,                 // next available space in codes[]   // index into codes[]
     lens: [u16, ..320],         // temporary storage for code lengths
     work: [u16, ..288],         // work area for code table building
-    codes: [Code, ..ENOUGH],        // space for code tables
+    codes: [Code, ..ENOUGH],    // space for code tables
     sane: bool,                 // if false, allow invalid distance too far
     back: uint,                 // bits back of last unprocessed length/lit
     was: uint,                  // initial length of match
@@ -325,14 +323,14 @@ impl InflateState
     }
 
     // was inflate_reset_keep 
-    fn reset_keep(&mut self, strm: &mut ZStream)
+    pub fn reset_keep(&mut self, strm: &mut ZStream)
     {
         strm.total_in = 0;
         strm.total_out = 0;
         self.total = 0;
         strm.msg = None;
         if self.wrap != 0 {
-            /* to support ill-conceived Java test suite */
+            // to support ill-conceived Java test suite
             strm.adler = self.wrap as u32 & 1;
         }
         self.mode = InflateMode::HEAD;
@@ -343,9 +341,6 @@ impl InflateState
         self.hold = 0;
         self.bits = 0;
 
-        // self.lencode =
-        // self.distcode =
-        // self.next = self.codes;
         self.lencode = 0;      // index into self.codes
         self.distcode = 0;     // index into self.codes
         self.next = 0;         // index into self.codes
@@ -439,6 +434,7 @@ impl InflateState
             None => Flush::None
         };
 
+        let strm_avail_out = output_buffer.len();
         let mut locs = InflateLocals {
             strm: strm,
             state: self,
@@ -454,7 +450,9 @@ impl InflateState
             out: 0,
             flush: flush,
             strm_next_in: 0,
-            strm_avail_in: input_buffer.len()
+            strm_avail_in: input_buffer.len(),
+            strm_next_out: 0,
+            strm_avail_out: strm_avail_out
         };
         let loc = &mut locs;
 
@@ -958,12 +956,8 @@ impl InflateState
             }
             InflateMode::CODELENS => {
                 while loc.state.have < loc.state.nlen + loc.state.ndist {
-                    let mut here: Code;         // current decoding table entry
-                    loop {
-                        here = loc.state.codes[loc.state.lencode + bits(loc, loc.state.lenbits) as uint];
-                        if here.bits as uint <= loc.bits {
-                            break;
-                        }
+                    let mut here: Code; // current decoding table entry
+                    while { here = loc.state.codes[loc.state.lencode + bits(loc, loc.state.lenbits) as uint]; here.bits as uint > loc.bits } {
                         PULLBYTE!(loc);
                     }
                     if here.val < 16 {
@@ -972,58 +966,44 @@ impl InflateState
                         loc.state.have += 1;
                     }
                     else {
-                        let mut copy :uint;
-                        let mut len :uint;
-                        if here.val == 16 {
+                        let (len, copy) = if here.val == 16 {
                             NEEDBITS!(loc, here.bits as uint + 2);
                             dropbits(loc, here.bits as uint);
                             if loc.state.have == 0 {
                                 BADINPUT!(loc, "invalid bit length repeat");
                             }
-                            len = loc.state.lens[loc.state.have as uint - 1] as uint;
-                            copy = 3 + bits(loc, 2) as uint;
-                            dropbits(loc, 2);
+                            (loc.state.lens[loc.state.have as uint - 1], 3 + bits_and_drop(loc, 2) as uint)
                         }
                         else if here.val == 17 {
                             NEEDBITS!(loc, here.bits as uint + 3);
                             dropbits(loc, here.bits as uint);
-                            len = 0;
-                            copy = 3 + bits(loc, 3) as uint;
-                            dropbits(loc, 3);
+                            (0, 3 + bits_and_drop(loc, 3) as uint)
                         }
                         else {
                             NEEDBITS!(loc, here.bits as uint + 7);
                             dropbits(loc, here.bits as uint);
-                            len = 0;
-                            copy = 11 + bits(loc, 7) as uint;
-                            dropbits(loc, 7);
-                        }
+                            (0, 11 + bits_and_drop(loc, 7) as uint)
+                        };
                         if loc.state.have + copy > loc.state.nlen + loc.state.ndist {
                             BADINPUT!(loc, "invalid bit length repeat");
                         }
-                        while copy != 0 {
-                            copy -= 1;
+                        for _ in range(0, copy) {
                             loc.state.lens[loc.state.have] = len as u16;
                             loc.state.have += 1;
                         }
                     }
                 }
 
-                /* handle error breaks in while */
-                if loc.state.mode == InflateMode::BAD {
-                    continue;
-                }
-
-                /* check for end-of-block code (better have one) */
+                // check for end-of-block code (better have one)
                 if loc.state.lens[256] == 0 {
-                    BADINPUT!(loc, "invalid code -- missing end-of-block");
+                    BADINPUT!(loc, "(CODELENS) invalid code -- missing end-of-block");
                 }
 
-                /* build code tables -- note: do not change the lenbits or distbits
-                   values here (9 and 6) without reading the comments in inftrees.h
-                   concerning the ENOUGH constants, which depend on those values */
-                loc.state.next = 0; // loc.state.codes;
-                loc.state.lencode = 0; // (const code FAR *)(state.next);
+                // build code tables -- note: do not change the lenbits or distbits
+                // values here (9 and 6) without reading the comments in inftrees.h
+                // concerning the ENOUGH constants, which depend on those values
+                loc.state.next = 0;
+                loc.state.lencode = 0;
                 loc.state.lenbits = 9;
                 debug!("calling inflate_table for lengths");
                 let (inflate_result, inflate_bits) = inflate_table(
@@ -1063,6 +1043,8 @@ impl InflateState
                     inflate_fast(loc.state, loc.strm, loc.input_buffer, loc.output_buffer, 
                         &mut loc.strm_next_in,
                         &mut loc.strm_avail_in,
+                        &mut loc.strm_next_out,
+                        &mut loc.strm_avail_out,
                         loc.out);
                     load_locals(loc);
                     if loc.state.mode == InflateMode::TYPE {
@@ -1571,8 +1553,8 @@ fn crc4(check: u32, word: u32) -> u32
 // was LOAD
 #[inline]
 fn load_locals(loc: &mut InflateLocals) {
-    loc.put = loc.strm.next_out;
-    loc.left = loc.strm.avail_out;
+    loc.put = loc.strm_next_out;
+    loc.left = loc.strm_avail_out;
     loc.next = loc.strm_next_in;
     loc.have = loc.strm_avail_in;
     loc.hold = loc.state.hold;
@@ -1589,8 +1571,8 @@ fn restore_locals(loc: &mut InflateLocals) {
     debug!("restore_locals: put: {} left: {} next: {} have: {} hold: {} bits: {}",
         loc.put, loc.left, loc.next, loc.have, loc.hold, loc.bits);
 
-    loc.strm.next_out = loc.put;
-    loc.strm.avail_out = loc.left;
+    loc.strm_next_out = loc.put;
+    loc.strm_avail_out = loc.left;
     loc.strm_next_in = loc.next;
     loc.strm_avail_in = loc.have;
     loc.state.hold = loc.hold;
@@ -1623,7 +1605,6 @@ fn dropbits(loc: &mut InflateLocals, n: uint)
 {
     loc.hold >>= n;
     loc.bits -= n;
-    // debug!("dropbits: dropped {} bit(s), have {} left, hold = {:8x}", n, loc.bits, loc.hold);
 }
 
 fn bits_and_drop(loc: &mut InflateLocals, n: uint) -> u32
@@ -1635,9 +1616,6 @@ fn bits_and_drop(loc: &mut InflateLocals, n: uint) -> u32
 
 /* Remove zero to seven bits as needed to go to a byte boundary */
 fn bytebits(loc: &mut InflateLocals) {
-    if (loc.bits & 7) != 0 {
-        debug!("dropping {} bits to align to byte boundary", loc.bits & 7);
-    }
     loc.hold >>= loc.bits & 7;
     loc.bits -= loc.bits & 7;
 }
@@ -1732,19 +1710,21 @@ struct InflateLocals<'a>
     input_buffer: &'a [u8],
     output_buffer: &'a mut[u8],
 
-    have :uint,         // available input
-    left :uint,         // available output
-    hold :u32,          // bit buffer
-    bits :uint,         // bits in bit buffer
+    have: uint,         // available input
+    left: uint,         // available output
+    hold: u32,          // bit buffer
+    bits: uint,         // bits in bit buffer
     next: uint,         // next input; is an index into input_buffer
     put: uint,          // next output; is an index into output_buffer
-    in_ :uint,          // save starting available input
-    out :uint,          // save starting available output
+    in_: uint,          // save starting available input
+    out: uint,          // save starting available output
 
     flush: Flush,
 
-    strm_next_in: uint,
-    strm_avail_in: uint,
+    strm_next_in: uint,     // value moved from ZStream.next_in to here
+    strm_avail_in: uint,    // value moved from ZStream.avail_in to here
+    strm_next_out: uint,
+    strm_avail_out: uint,
 
 }
 
@@ -1758,18 +1738,17 @@ fn inf_leave(loc: &mut InflateLocals) -> InflateResult
     debug!("inf_leave");
     restore_locals(loc);
 
-    if loc.state.wsize != 0 || (loc.out != loc.strm.avail_out && (loc.state.mode as u32) < (InflateMode::BAD as u32) &&
+    if loc.state.wsize != 0 || (loc.out != loc.strm_avail_out && (loc.state.mode as u32) < (InflateMode::BAD as u32) &&
             ((loc.state.mode as u32) < (InflateMode::CHECK as u32) || (loc.flush != Flush::Finish))) {
-
-        debug!("strm.next_out = {}, strm.avail_out = {}, out = {}", loc.strm.next_out, loc.strm.avail_out, loc.out);
-        assert!(loc.out >= loc.strm.avail_out);
-        let e = loc.strm.next_out;
-        let c = loc.out - loc.strm.avail_out;
+        debug!("calling updatewindow(), next_out = {}, avail_out = {}, out = {}", loc.strm_next_out, loc.strm_avail_out, loc.out);
+        assert!(loc.out >= loc.strm_avail_out);
+        let e = loc.strm_next_out;
+        let c = loc.out - loc.strm_avail_out;
         updatewindow(loc, e, c);
     }
 
     loc.in_ -= loc.strm_avail_in;
-    loc.out -= loc.strm.avail_out;
+    loc.out -= loc.strm_avail_out;
 
     let in_inflated = loc.in_;
     let out_inflated = loc.out;
@@ -1778,7 +1757,7 @@ fn inf_leave(loc: &mut InflateLocals) -> InflateResult
     loc.strm.total_out += loc.out as u64;
     loc.state.total += loc.out;
     if loc.state.wrap != 0 && loc.out != 0 {
-        let updated_check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice(loc.strm.next_out - loc.out, loc.strm.next_out));
+        let updated_check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice(loc.strm_next_out - loc.out, loc.strm_next_out));
         loc.strm.adler = updated_check;
         loc.state.check = updated_check;
     }

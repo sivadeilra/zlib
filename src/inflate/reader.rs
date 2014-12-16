@@ -81,19 +81,17 @@ impl Reader for InflateReader {
         while outpos < buf.len() {
             if self.avail_in == 0 && !self.src_eof {
                 match self.fill_buffer() {
-                    Err(err) => { return  Err(err); }
+                    Err(err) => {
+                        // TODO: if err is EOF, then return Ok(outpos), not an error.
+                        return  Err(err);
+                    }
                     Ok(_) => ()
                 }
             }
 
             let inbuf = self.inbuf.slice(self.next_in, self.avail_in);
-
-            let mut strm: ZStream = ZStream::new();
-            strm.next_out = 0;
-            strm.avail_out = buf.len() - outpos;
-
             let buflen = buf.len();
-            match self.state.inflate(&mut strm, None, inbuf, buf.slice_mut(outpos, buflen)) {
+            match self.state.inflate(&mut self.strm, None, inbuf, buf.slice_mut(outpos, buflen)) {
                 InflateResult::Decoded(in_bytes, out_bytes) => {
                     self.avail_in -= in_bytes;
                     self.next_in += in_bytes;
