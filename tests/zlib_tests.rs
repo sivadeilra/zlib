@@ -1,8 +1,6 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
-#![feature(phase)]
-#[phase(plugin, link)] extern crate log;
 extern crate zlib;
 
 
@@ -177,14 +175,9 @@ fn test_inflate_reader(in_bufsize: uint, out_bufsize: uint)
     let mut output_buffer: Vec<u8> = Vec::with_capacity(out_bufsize);
     let mut check_buffer: Vec<u8> = Vec::new();
 
+    let mut total_out: u64 = 0;
+
     loop {
-        // println!("decode loop: avail_in = {}, next_in = {}, avail_out = {}, next_out = {}",
-        //     strm.avail_in, strm.next_in, strm.avail_out, strm.next_out);
-
-        // let total_out: u64 = strm.total_out;
-
-        let mut total_out: u64 = 0;
-
         match inflater.push(out_bufsize, &mut output_buffer) {
             Ok(output_bytes_written) => {
                 println!("inflate reader returned {} bytes", output_bytes_written);

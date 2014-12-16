@@ -8,7 +8,6 @@ use super::Code;
 use super::InflateState;
 use super::InflateMode;
 use std::slice::bytes::copy_memory;
-use std::char;
 
 pub struct BufPos<'a> {
     pub buf: &'a [u8],
@@ -48,12 +47,12 @@ impl<'a> InputState<'a> {
         self.pos += 1;
         self.hold += (b as u32) << self.bits;
         self.bits += 8;
-        debug!("loaded 0x{:02x}, bits = {:2}, hold = 0x{:08x}", b, self.bits, self.hold);
+        // debug!("loaded 0x{:02x}, bits = {:2}, hold = 0x{:08x}", b, self.bits, self.hold);
     }
     pub fn drop_bits(&mut self, n: uint) {
         self.bits -= n;
         self.hold >>= n;
-        debug!("dropped {} bits, bits = {:2}, hold = 0x{:08x}", n, self.bits, self.hold);
+        // debug!("dropped {} bits, bits = {:2}, hold = 0x{:08x}", n, self.bits, self.hold);
     }
 }
 
@@ -94,7 +93,7 @@ impl<'a> InputState<'a> {
 
 fn copy_within_output_buffer(buf: &mut [u8], dstpos: uint, srcpos: uint, len: uint)
 {
-    debug!("srcpos = {}, dstpos = {}, len = {}", srcpos, dstpos, len);
+    // debug!("srcpos = {}, dstpos = {}, len = {}", srcpos, dstpos, len);
     // the source region must be at lower indices than the dest region
 
     debug_assert!(srcpos <= dstpos);
@@ -106,9 +105,9 @@ fn copy_within_output_buffer(buf: &mut [u8], dstpos: uint, srcpos: uint, len: ui
         debug_assert!(srcpos + len <= dstpos);
 
         let (src_split, dst_split) = buf.split_at_mut(dstpos);
-        debug!("src_split.len() = {}, dst_split.len() = {}", src_split.len(), dst_split.len());
+        // debug!("src_split.len() = {}, dst_split.len() = {}", src_split.len(), dst_split.len());
         let src_buf = src_split.slice(srcpos, srcpos + len);
-        debug!("src_buf.len() = {}", src_buf.len());
+        // debug!("src_buf.len() = {}", src_buf.len());
         copy_memory(dst_split, src_buf);
     }
     else {
@@ -158,7 +157,7 @@ pub fn inflate_fast(
 
     Tracevv!("total_in: {}", strm.total_in);
 
-    debug!("wsize = {}, window.len = {}", wsize, window.len());
+    // debug!("wsize = {}, window.len = {}", wsize, window.len());
     // assert!(wsize == window.len());
 
     let mut input = InputState {
@@ -169,12 +168,12 @@ pub fn inflate_fast(
     };
     let last: uint = input.pos + (*strm_avail_in - 5);     // (index into input_buffer) have enough input while in < last
 
-    debug!("starting inflate_fast");
-    debug!("    total_in: {}, next_in: {}", strm.total_in, *strm_next_in);
-    debug!("    wsize = {}, whave = {}, wnext = {}, window buffer size = {}", wsize, whave, wnext, window.len());
-    debug!("    hold = 0x{:08x}, bits = {}", input.hold, input.bits);
-    debug!("    beg = {}, end = {}", beg, end);
-    debug!("    input: pos = {}, last = {}", input.pos, last);
+    // debug!("starting inflate_fast");
+    // debug!("    total_in: {}, next_in: {}", strm.total_in, *strm_next_in);
+    // debug!("    wsize = {}, whave = {}, wnext = {}, window buffer size = {}", wsize, whave, wnext, window.len());
+    // debug!("    hold = 0x{:08x}, bits = {}", input.hold, input.bits);
+    // debug!("    beg = {}, end = {}", beg, end);
+    // debug!("    input: pos = {}, last = {}", input.pos, last);
 
     // we use 'st' to simulate gotos
     let mut st = InflateFastState::Start;
@@ -197,7 +196,7 @@ pub fn inflate_fast(
     // decode literals and length/distances until end-of-block or not enough
     // input data or output space
     loop {
-        debug!("main loop - st = {}", st);
+        // debug!("main loop - st = {}", st);
         st = match st {
             InflateFastState::Start => {
                 if input.bits < 15 {
@@ -205,7 +204,7 @@ pub fn inflate_fast(
                     input.load_byte();
                 }
                 here = codes[(lcode + (input.hold & lmask) as uint) as uint];
-                debug!("(start): here := op: {}, bits: {}, val: {}", here.op, here.bits, here.val);
+                // debug!("(start): here := op: {}, bits: {}, val: {}", here.op, here.bits, here.val);
                 InflateFastState::DoLen
             }
 
@@ -218,10 +217,10 @@ pub fn inflate_fast(
                     // debug!("(dolen): consumed {:2} bits, {:2} bits left, output literal byte: 0x{:2x}", here.bits, input.bits, here.val);
 
                     if here.val >= 0x20 && here.val < 0x7f {
-                        Tracevv!("inflate:         literal '{}'", char::from_u32(here.val as u32).unwrap());
+                        debug!("inflate: F       literal '{}'", ::std::char::from_u32(here.val as u32).unwrap());
                     }
                     else {
-                        Tracevv!("inflate:         literal 0x{:02x}", here.val);
+                        debug!("inflate: F       literal 0x{:02x}", here.val);
                     }
 
                     out.write(here.val as u8); // truncate u16 to u8
@@ -239,7 +238,7 @@ pub fn inflate_fast(
                         input.drop_bits(extra_bits);
                         // debug!("    used {} extra bits to decode {} more length", extra_bits, more_len);
                     }
-                    Tracevv!("inflate:         length {}", len);
+                    debug!("inflate: F       length {}", len);
                     // debug!("(dolen): consumed {:2} bits, {:2} bits left, length = {}", here.bits, input.bits, len);
                     if input.bits < 15 {
                         input.load_byte();
@@ -270,6 +269,7 @@ pub fn inflate_fast(
                     break;
                 }
 
+                /*
                 if input.pos >= last {
                     debug!("reached end of input; halting");
                     break;
@@ -278,6 +278,7 @@ pub fn inflate_fast(
                     debug!("reached end of output; halting");
                     break;
                 }
+                */
                 InflateFastState::Start
             }
 
@@ -314,9 +315,7 @@ pub fn inflate_fast(
                     // window as in the output buffer (i think?), it is easier to copy within the
                     // output buffer, rather than dealing with wrap-around in the window buffer.
                     let mut maxout = out.pos - beg;     /* max distance in output */
-                    debug!("inflate: distance = {}, maxout = {}", dist, maxout);
-                    Tracevv!("inflate:         distance {}", dist);
-                    Tracevv!("maxout: {}", maxout);
+                    debug!("inflate: F       distance {}", dist);
                     if dist > maxout {
                         // The distance exceeds the data that is stored within the output buffer.
                         // We still may be able to copy some data from the output buffer, but we
@@ -324,7 +323,7 @@ pub fn inflate_fast(
 
                         /* see if copy from window */
                         maxout = dist - maxout; /* distance back in window */
-                        Tracevv!("maxout = dist - maxout = {}", maxout);
+                        // Tracevv!("maxout = dist - maxout = {}", maxout);
                         if maxout > whave {
                             if state.sane {
                                 strm.msg = Some("invalid distance too far back".to_string());
@@ -410,7 +409,7 @@ pub fn inflate_fast(
                         }
                         else if wnext < maxout {
                             // wrap around window
-                            debug!("wrap around window");
+                            // debug!("wrap around window");
                             Tracevv!("wrap around window, wnext: {}, op: {}, advancing from by {}", wnext, maxout, wsize + wnext - maxout);
                             from.pos += wsize + wnext - maxout;
                             maxout -= wnext;
@@ -448,8 +447,7 @@ pub fn inflate_fast(
                         }
                         else {
                             // contiguous in window
-                            debug!("contiguous in window, advancing {}", wnext - maxout);
-                            Tracevv!("contiguous in window, from += {}", wnext - maxout);
+                            // debug!("contiguous in window, advancing {}", wnext - maxout);
 
                             from.pos += wnext - maxout;
                             if maxout < len {
@@ -480,13 +478,13 @@ pub fn inflate_fast(
                         //      (out.pos - dist + len) <= out.pos
                         // assert!(out.pos - dist + len <= out.pos);
                         // assert!(len - dist <= 0);
-                        debug!("copy direct from output, dist = {}, out.pos = {}, src pos = {}, len = {}", dist, out.pos, out.pos - dist, len);
+                        // debug!("copy direct from output, dist = {}, out.pos = {}, src pos = {}, len = {}", dist, out.pos, out.pos - dist, len);
                         // assert!(dist >= len);
 
                         // copy direct from output
                         debug_assert!(len >= 3); // minimum length is three
 
-                        Tracevv!("copy direct from output, len: {}", len);
+                        // Tracevv!("copy direct from output, len: {}", len);
 
                         // note: this can legally be a self-overlapping copy!
                         while len > 0 {
@@ -495,12 +493,12 @@ pub fn inflate_fast(
                             len -= 1;
                         }
 
-                        Tracevv!("out.pos: {}, input.pos: {}, bits: {}, hold: 0x{:08x}", out.pos - *strm_next_out, input.pos - *strm_next_in, input.bits, input.hold);
+                        // Tracevv!("out.pos: {}, input.pos: {}, bits: {}, hold: 0x{:08x}", out.pos - *strm_next_out, input.pos - *strm_next_in, input.bits, input.hold);
                     }
                 }
                 else if (op & 64) == 0 {
                     // 2nd level distance code
-                    debug!("second-level distance code");
+                    // debug!("second-level distance code");
                     here = codes[dcode + (here.val as uint + (input.hold & ((1 << op) - 1)) as uint)];
                     Tracevv!("second level distance code, op {} bits {} val {}", here.op, here.bits, here.val);
                     st = InflateFastState::DoDist;
@@ -517,16 +515,14 @@ pub fn inflate_fast(
 
         match st {
             InflateFastState::Start => {
-                Tracevv!("last - in = {}", (last as int) - (input.pos as int));
+                // Tracevv!("last - in = {}", (last as int) - (input.pos as int));
                 if input.pos >= last {
-                    debug!("breaking loop (end of input)");
-                    Tracevv!("stopping (no input)");
+                    debug!("inflate_fast: breaking loop (end of input)");
                     break;
                 }
 
                 if out.pos >= end {
-                    debug!("breaking loop (end of output)");
-                    Tracevv!("stopping (no output)");
+                    debug!("inflate_fast: breaking loop (end of output)");
                     break;
                 }
             }
@@ -534,8 +530,8 @@ pub fn inflate_fast(
         }
     }
 
-    debug!("done.");
-    debug!("    input: pos = {}, last = {}", input.pos, last);
+    // debug!("done.");
+    // debug!("    input: pos = {}, last = {}", input.pos, last);
 
     // return unused bytes (on entry, bits < 8, so in won't go too far back)
     let len = input.bits >> 3;
@@ -544,7 +540,7 @@ pub fn inflate_fast(
     input.hold &= (1 << input.bits) - 1;
 
     // we expect to have advanced state
-    debug!("    input.pos = {}, strm.next_in = {}", input.pos, *strm_next_in);
+    // debug!("    input.pos = {}, strm.next_in = {}", input.pos, *strm_next_in);
     assert!(input.pos > *strm_next_in || out.pos > *strm_next_out);
 
     // update state and return
@@ -555,13 +551,13 @@ pub fn inflate_fast(
     state.hold = input.hold;
     state.bits = input.bits;
 
-    debug!("done.  strm {{ next_in: {}, next_out: {}, avail_in: {}, avail_out: {} }}",
-        *strm_next_in,
-        *strm_next_out,
-        *strm_avail_in,
-        *strm_avail_out);
-
-    Tracevv!("done.  avail_in: {}, avail_out: {}", strm.avail_in, strm.avail_out);
+    // debug!("done.  strm {{ next_in: {}, next_out: {}, avail_in: {}, avail_out: {} }}",
+    //     *strm_next_in,
+    //     *strm_next_out,
+    //     *strm_avail_in,
+    //     *strm_avail_out);
+    // 
+    // Tracevv!("done.  avail_in: {}, avail_out: {}", strm.avail_in, strm.avail_out);
 }
 
 /*

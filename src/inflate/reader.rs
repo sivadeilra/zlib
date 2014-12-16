@@ -12,7 +12,6 @@ pub struct InflateReader
     strm: ZStream,
 
     inbuf: Vec<u8>,
-    avail_in: uint,
     next_in: uint,
 
     /// Set true when 'src' reports EOF.
@@ -31,12 +30,7 @@ impl InflateReader
 
         InflateReader {
             src: src,
-            inbuf: {
-                let mut v: Vec<u8> = Vec::with_capacity(inbufsize);
-                v.grow(inbufsize, 0u8);
-                v
-            },
-            avail_in: 0,
+            inbuf: Vec::with_capacity(inbufsize),
             next_in: 0,
             src_eof: false,
             state: InflateState::new(WINDOW_BITS_DEFAULT, wrap),
@@ -47,12 +41,12 @@ impl InflateReader
 
 impl InflateReader {
     fn fill_buffer(&mut self) -> IoResult<()> {
-        let buf = self.inbuf.as_mut_slice();
-        let result = self.src.read(buf);
+        self.inbuf.clear();
+        let result = self.src.push(self.inbuf.capacity(), &mut self.inbuf);
         match result {
             Ok(count) => {
-                self.avail_in = count;
                 self.next_in = 0;
+                debug!("next_in=0 inbuf.len()={}", self.inbuf.len());
                 Ok(())
             }
             Err(err) => {
@@ -79,7 +73,7 @@ impl Reader for InflateReader {
         }
 
         while outpos < buf.len() {
-            if self.avail_in == 0 && !self.src_eof {
+            if self.next_in == self.inbuf.len() && !self.src_eof {
                 match self.fill_buffer() {
                     Err(err) => {
                         // TODO: if err is EOF, then return Ok(outpos), not an error.
@@ -89,11 +83,11 @@ impl Reader for InflateReader {
                 }
             }
 
-            let inbuf = self.inbuf.slice(self.next_in, self.avail_in);
+            let inbuf = self.inbuf.slice(self.next_in, self.inbuf.len());
             let buflen = buf.len();
+            debug!("InflateReader: calling inflate, in_len={} out_len={}", inbuf.len(), buflen - outpos);
             match self.state.inflate(&mut self.strm, None, inbuf, buf.slice_mut(outpos, buflen)) {
                 InflateResult::Decoded(in_bytes, out_bytes) => {
-                    self.avail_in -= in_bytes;
                     self.next_in += in_bytes;
                     outpos += out_bytes;
                 }

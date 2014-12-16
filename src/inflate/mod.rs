@@ -29,7 +29,6 @@ mod inffast;
 mod inftrees;
 mod reader;
 
-
 macro_rules! BADINPUT {
     ($loc:expr, $msg:expr) => {
         {
@@ -133,7 +132,6 @@ pub enum InflateResult
     Eof(u32),               // input data stream has reached its end; value is crc32 of stream
     NeedInput,              // could decode more, but need more input buffer space
     Decoded(uint, uint),    // decoded N bytes of input, wrote N bytes of output
-    NeedOutput,             // could decode more, but need more output buffer space
     InvalidData,            // input data is malformed, decoding has halted
 }
 
@@ -207,6 +205,16 @@ enum InflateMode {
     Process trailer:
         CHECK -> LENGTH -> DONE
  */
+
+macro_rules! goto_mode {
+    ($loc:expr, $mode:ident) => {
+        {
+            $loc.is_goto = true;
+            $loc.state.mode = InflateMode::$mode;
+            continue;
+        }
+    }
+}
 
 /// Defines the state needed to inflate (decompress) a stream.
 /// Use InflateState::new() to create a stream.
@@ -429,6 +437,18 @@ impl InflateState
         input_buffer: &'a [u8],
         output_buffer: &'a mut[u8]) -> InflateResult
     {
+        debug!("inflate: avail_in={} avail_out={}", input_buffer.len(), output_buffer.len());
+
+        match self.mode {
+            InflateMode::BAD => {
+                return InflateResult::InvalidData
+            }
+            InflateMode::DONE => {
+                return InflateResult::Eof(self.check)
+            }
+            _ => ()
+        }
+
         let flush = match flush {
             Some(f) => f,
             None => Flush::None
@@ -452,7 +472,8 @@ impl InflateState
             strm_next_in: 0,
             strm_avail_in: input_buffer.len(),
             strm_next_out: 0,
-            strm_avail_out: strm_avail_out
+            strm_avail_out: strm_avail_out,
+            is_goto: false,
         };
         let loc = &mut locs;
 
@@ -474,10 +495,19 @@ impl InflateState
 
         loc.in_ = loc.have;
         loc.out = loc.left;
+
         // ret = Z_OK;
         loop {
             let oldmode = loc.state.mode;
-            debug!("inflate: mode = {}", loc.state.mode);
+            // debug!("inflate: mode = {}", loc.state.mode);
+
+            if loc.is_goto {
+                loc.is_goto = false;
+            }
+            else {
+                debug!("inflate: mode={}", loc.state.mode as u32);
+            }
+
             match loc.state.mode {
             InflateMode::HEAD => {
                 if loc.state.wrap == 0 {
@@ -496,6 +526,9 @@ impl InflateState
                     loc.state.mode = InflateMode::FLAGS;
                     continue;
                 }
+
+                debug!("hold = 0x{:08x}, wrap = {}", loc.hold, loc.state.wrap);
+
                 loc.state.flags = 0;           /* expect zlib header */
 
                 /*
@@ -528,8 +561,8 @@ impl InflateState
                     BADINPUT!(loc, "invalid window size".to_string());
                 }
                 loc.state.dmax = 1 << len;
-                debug!("max distance (dmax) = {} 0x{:x}", loc.state.dmax, loc.state.dmax);
-                debug!("inflate:   zlib header ok");
+                // debug!("max distance (dmax) = {} 0x{:x}", loc.state.dmax, loc.state.dmax);
+                // debug!("inflate:   zlib header ok");
                 let adler_value = adler32(0, &[]);
                 loc.strm.adler = adler_value;
                 loc.state.check = adler_value;
@@ -544,7 +577,7 @@ impl InflateState
                 let flags = loc.hold;
                 let is_text = ((loc.hold >> 8) & 1) != 0;
                 let method = flags & 0xff;
-                debug!("FLAGS: flags: 0x{:8x} is_text: {}", flags, is_text);
+                // debug!("FLAGS: flags: 0x{:8x} is_text: {}", flags, is_text);
 
                 loc.state.flags = loc.hold;
                 if method != Z_DEFLATED as u32 {
@@ -561,20 +594,20 @@ impl InflateState
                     None => ()
                 }
                 if (loc.state.flags & 0x0200) != 0 {
-                    debug!("FLAGS contains time");
+                    // debug!("FLAGS contains time");
                     loc.state.check = crc2(loc.state.check, loc.hold);
                 }
                 else {
-                    debug!("FLAGS did not have a time");
+                    // debug!("FLAGS did not have a time");
                 }
                 initbits(loc);
-                loc.state.mode = InflateMode::TIME;
+                goto_mode!(loc, TIME);
             }
 
             InflateMode::TIME => {
                 NEEDBITS!(loc, 32);
                 let time :u32 = loc.state.hold;
-                debug!("TIME: t: {}", time);
+                // debug!("TIME: t: {}", time);
 
                 /*if (state.head != Z_NULL)
                     state.head.time = time;
@@ -584,7 +617,7 @@ impl InflateState
                     loc.state.check = crc4(loc.state.check, time);
                 }
                 initbits(loc);
-                loc.state.mode = InflateMode::OS;
+                goto_mode!(loc, OS);
             }
 
             InflateMode::OS => {
@@ -592,7 +625,7 @@ impl InflateState
                 let ostype = loc.state.hold;
                 let xflags = ostype & 0xff;
                 let os = ostype >> 8;
-                debug!("OS: os 0x{:x} xflags 0x{:x}", os, xflags);
+                // debug!("OS: os 0x{:x} xflags 0x{:x}", os, xflags);
                 match loc.state.head {
                     Some(ref mut h) => {
                         h.xflags = xflags;
@@ -604,7 +637,7 @@ impl InflateState
                     loc.state.check = crc2(loc.state.check, ostype);
                 }
                 initbits(loc);
-                loc.state.mode = InflateMode::EXLEN;
+                goto_mode!(loc, EXLEN);
             }
 
             InflateMode::EXLEN => {
@@ -613,7 +646,7 @@ impl InflateState
                     let extra_len = loc.state.hold & 0xffff;
                     loc.state.length = extra_len as uint;
 
-                    debug!("EXTRALEN: extra_len = {}", extra_len);
+                    // debug!("EXTRALEN: extra_len = {}", extra_len);
 
                     match loc.state.head {
                         Some(ref mut h) => {
@@ -628,16 +661,15 @@ impl InflateState
                     initbits(loc);
                 }
                 else {
-                    debug!("no EXTRALEN");
+                    // debug!("no EXTRALEN");
                     match loc.state.head {
                         Some(ref mut h) => {
-                            // h.extra = Z_NULL;
                             h.extra_len = 0;
                         }
                         None => ()
                     }
                 }
-                loc.state.mode = InflateMode::EXTRA;
+                goto_mode!(loc, EXTRA);
             }
 
             InflateMode::EXTRA => {
@@ -667,15 +699,15 @@ impl InflateState
                     }
                 }
                 else {
-                    debug!("no EXTRA");
+                    // debug!("no EXTRA");
                 }
                 loc.state.length = 0;
-                loc.state.mode = InflateMode::NAME;
+                goto_mode!(loc, NAME);
             }
 
             InflateMode::NAME => {
                 if (loc.state.flags & 0x0800) != 0 {
-                    debug!("NAME: header flags indicate that stream contains a NAME record");
+                    // debug!("NAME: header flags indicate that stream contains a NAME record");
                     if loc.have == 0 {
                         return inf_leave(loc);
                     }
@@ -702,20 +734,20 @@ impl InflateState
                 }
                 else
                 {
-                    debug!("NAME: header does not contain a NAME record");
+                    // debug!("NAME: header does not contain a NAME record");
                     /*TODO if (state.head != Z_NULL) {
                         state.head.name = Z_NULL;
                     }*/
                 }
                 loc.state.length = 0;
-                loc.state.mode = InflateMode::COMMENT;
+                goto_mode!(loc, COMMENT);
             }
 
             InflateMode::COMMENT => {
                 if (loc.state.flags & 0x1000) != 0 {
-                    debug!("COMMENT: header contains a COMMENT record");
+                    // debug!("COMMENT: header contains a COMMENT record");
                     if loc.have == 0 {
-                        debug!("have no data, returning");
+                        // debug!("have no data, returning");
                         return inf_leave(loc);
                     }
                     let mut copy = 0;
@@ -748,19 +780,19 @@ impl InflateState
                     }
                 }
                 else {
-                    debug!("COMMENT: header does not contain a COMMENT record");
+                    // debug!("COMMENT: header does not contain a COMMENT record");
                     // TODO
                     // if (state.head != Z_NULL)
                     //     state.head.comment = Z_NULL;
                 }
-                loc.state.mode = InflateMode::HCRC;
+                goto_mode!(loc, HCRC);
             }
 
             InflateMode::HCRC => {
                 if (loc.state.flags & 0x0200) != 0 {
                     NEEDBITS!(loc, 16);
                     let expected_crc = loc.hold;
-                    debug!("HCRC: header says expected CRC = 0x{:x}", expected_crc);
+                    // debug!("HCRC: header says expected CRC = 0x{:x}", expected_crc);
                     /* TODO - CRC
                     if expected_crc != (loc.state.check & 0xffff) {
                         BADINPUT!(loc, "header crc mismatch");
@@ -781,11 +813,11 @@ impl InflateState
             InflateMode::DICTID => {
                 NEEDBITS!(loc, 32);
                 let check = swap32(loc.hold);
-                debug!("check = 0x{:x}", check);
+                // debug!("check = 0x{:x}", check);
                 loc.strm.adler = check;
                 loc.state.check = check;
                 initbits(loc);
-                loc.state.mode = InflateMode::DICT;
+                goto_mode!(loc, DICT);
             }
 
             InflateMode::DICT => {
@@ -797,7 +829,7 @@ impl InflateState
                 let check = adler32(0, &[]);
                 loc.strm.adler = check;
                 loc.state.check = check;
-                loc.state.mode = InflateMode::TYPE;
+                goto_mode!(loc, TYPE);
             }
 
             InflateMode::TYPE => {
@@ -805,12 +837,12 @@ impl InflateState
                     debug!("TYPE: flush is Z_BLOCK or Z_TREES, returning");
                     return inf_leave(loc);
                 }
-                loc.state.mode = InflateMode::TYPEDO;
+                goto_mode!(loc, TYPEDO);
             }
 
             InflateMode::TYPEDO => {
                 if loc.state.last {
-                    debug!("TYPEDO: is last block, --> CHECK");
+                    // debug!("TYPEDO: is last block, --> CHECK");
                     bytebits(loc);
                     loc.state.mode = InflateMode::CHECK;
                 }
@@ -818,7 +850,7 @@ impl InflateState
                     NEEDBITS!(loc, 3);
                     loc.state.last = bitbool(loc);
                     dropbits(loc, 1);
-                    debug!("TYPEDO: last = {}, kind = {}", loc.state.last, bits(loc, 2));
+                    // debug!("TYPEDO: last = {}, kind = {}", loc.state.last, bits(loc, 2));
                     match bits(loc, 2) {
                         0 => { // stored block 
                             if loc.state.last {
@@ -879,9 +911,10 @@ impl InflateState
                     debug!("flush = Z_TREES, so returning");
                     return inf_leave(loc);
                 }
+                goto_mode!(loc, COPY_);
             }
             InflateMode::COPY_ => {
-                loc.state.mode = InflateMode::COPY;
+                goto_mode!(loc, COPY);
             }
             InflateMode::COPY => {
                 copy = loc.state.length;
@@ -912,18 +945,18 @@ impl InflateState
                 loc.state.nlen = bits_and_drop(loc, 5) as uint + 257;
                 loc.state.ndist = bits_and_drop(loc, 5) as uint + 1;
                 loc.state.ncode = bits_and_drop(loc, 4) as uint + 4;
-                debug!("TABLE: nlen {} ndist {} ncode {}", loc.state.nlen, loc.state.ndist, loc.state.ncode);
+                // debug!("TABLE: nlen {} ndist {} ncode {}", loc.state.nlen, loc.state.ndist, loc.state.ncode);
     // #ifndef PKZIP_BUG_WORKAROUND
                 if loc.state.nlen > 286 || loc.state.ndist > 30 {
                     BADINPUT!(loc, "too many length or distance symbols");
                 }
     // #endif
                 loc.state.have = 0;
-                loc.state.mode = InflateMode::LENLENS;
+                goto_mode!(loc, LENLENS);
             }
 
             InflateMode::LENLENS => {
-                debug!("have = {}, ncode = {}, reading {} lengths", loc.state.have, loc.state.ncode, loc.state.ncode - loc.state.have);
+                // debug!("have = {}, ncode = {}, reading {} lengths", loc.state.have, loc.state.ncode, loc.state.ncode - loc.state.have);
                 while loc.state.have < loc.state.ncode {
                     NEEDBITS!(loc, 3);
                     let lenlen = bits(loc, 3);
@@ -939,7 +972,7 @@ impl InflateState
                     loc.state.lens[lenindex] = 0;
                     loc.state.have += 1;
                 }
-                debug!("inflating code lengths");
+                // debug!("inflating code lengths");
                 loc.state.next = 0;
                 loc.state.lencode = loc.state.next;
                 loc.state.lenbits = 7;
@@ -950,9 +983,9 @@ impl InflateState
                 if ret != 0 {
                     BADINPUT!(loc, "invalid code lengths set");
                 }
-                debug!("code lengths are ok");
+                // debug!("code lengths are ok");
                 loc.state.have = 0;
-                loc.state.mode = InflateMode::CODELENS;
+                goto_mode!(loc, CODELENS);
             }
             InflateMode::CODELENS => {
                 while loc.state.have < loc.state.nlen + loc.state.ndist {
@@ -1005,7 +1038,7 @@ impl InflateState
                 loc.state.next = 0;
                 loc.state.lencode = 0;
                 loc.state.lenbits = 9;
-                debug!("calling inflate_table for lengths");
+                // debug!("calling inflate_table for lengths");
                 let (inflate_result, inflate_bits) = inflate_table(
                     LENS, loc.state.lens.as_slice(), loc.state.nlen, &mut loc.state.codes, &mut loc.state.next,
                                     loc.state.lenbits, loc.state.work.as_mut_slice());
@@ -1016,8 +1049,8 @@ impl InflateState
                 }
                 loc.state.distcode = loc.state.next;
                 loc.state.distbits = 6;
-                debug!("calling inflate_table for codes");
-                debug!("loc.state.lens = {}, loc.state.nlen = {}, loc.state.ndist = {}", loc.state.lens.len(), loc.state.nlen, loc.state.ndist);
+                // debug!("calling inflate_table for codes");
+                // debug!("loc.state.lens = {}, loc.state.nlen = {}, loc.state.ndist = {}", loc.state.lens.len(), loc.state.nlen, loc.state.ndist);
 
                 let (inflate_ret, inflate_bits) = {
                     let codes_lens = loc.state.lens.slice(loc.state.nlen, loc.state.nlen + loc.state.ndist);
@@ -1027,18 +1060,21 @@ impl InflateState
                     BADINPUT!(loc, "invalid distances set");
                 }
                 loc.state.distbits = inflate_bits;
-                debug!("codes are ok");
+                // debug!("codes are ok");
                 loc.state.mode = InflateMode::LEN_;
                 if flush == Flush::Trees {
                     debug!("flush = Z_TREES, returning");
                     return inf_leave(loc);
                 }
+                goto_mode!(loc, LEN_);
             }
             InflateMode::LEN_ => {
-                loc.state.mode = InflateMode::LEN;
+                goto_mode!(loc, LEN);
             }
             InflateMode::LEN => {
-                if loc.have >= 6 && loc.left >= 258 {
+                debug!("LEN: left={}", loc.left); // fast path isn't correct yet
+                if loc.have >= 6 && loc.left >= 258 && false {
+                    debug!("LEN: fast path");
                     restore_locals(loc);
                     inflate_fast(loc.state, loc.strm, loc.input_buffer, loc.output_buffer, 
                         &mut loc.strm_next_in,
@@ -1052,6 +1088,7 @@ impl InflateState
                     }
                 }
                 else {
+                    debug!("LEN: slow path");
                     loc.state.back = 0;
                     let mut here: Code;         // current decoding table entry
                     loop {
@@ -1079,11 +1116,9 @@ impl InflateState
                     if here.op == 0 {
                         if here.val >= 0x20 && here.val < 0x7f {
                             debug!("inflate:         literal '{}'", here.val as u8 as char);
-                            Tracevv!("inflate:         literal '{}'", here.val as u8 as char);
                         }
                         else {
                             debug!("inflate:         literal 0x{:02x}", here.val);
-                            Tracevv!("inflate:         literal 0x{:02x}", here.val);
                         }
                         loc.state.mode = InflateMode::LIT;
                         continue;
@@ -1098,11 +1133,12 @@ impl InflateState
                         BADINPUT!(loc, "invalid literal/length code");
                     }
                     loc.state.extra = (here.op & 15) as uint;
-                    loc.state.mode = InflateMode::LENEXT;
+                    goto_mode!(loc, LENEXT);
                 }
             }
 
             InflateMode::LENEXT => {
+                debug!("LENEXT: extra={}", loc.state.extra);
                 if loc.state.extra != 0 {
                     NEEDBITS!(loc, loc.state.extra);
                     loc.state.length += bits(loc, loc.state.extra as uint) as uint;
@@ -1111,9 +1147,8 @@ impl InflateState
                     loc.state.back += loc.state.extra;
                 }
                 debug!("inflate:         length {}", loc.state.length);
-                Tracevv!("inflate:         length {}", loc.state.length);
                 loc.state.was = loc.state.length;
-                loc.state.mode = InflateMode::DIST;
+                goto_mode!(loc, DIST);
             }
 
             InflateMode::DIST => {
@@ -1144,7 +1179,7 @@ impl InflateState
                 }
                 loc.state.offset = here.val as uint;
                 loc.state.extra = (here.op & 15) as uint;
-                loc.state.mode = InflateMode::DISTEXT;
+                goto_mode!(loc, DISTEXT);
             }
 
             InflateMode::DISTEXT => {
@@ -1161,18 +1196,20 @@ impl InflateState
                 }
     // #endif
                 debug!("inflate:         distance {}", loc.state.offset);
-                Tracevv!("inflate:         distance {}", loc.state.offset);
-                loc.state.mode = InflateMode::MATCH;
+                goto_mode!(loc, MATCH);
             }
 
             InflateMode::MATCH => {
                 let mut from :BufPos; // index into loc.input_buffer (actually, several different buffers)
                 if loc.left == 0 {
+                    debug!("MATCH: inf_leave");
                     return inf_leave(loc);
                 }
                 let mut copy = loc.out - loc.left;
+                debug!("copy={} state.offset={}", copy, loc.state.offset);
                 if loc.state.offset > copy {         /* copy from window */
                     copy = loc.state.offset - copy;
+                    debug!("copy from window, copy={}", copy);
                     if copy > loc.state.whave {
                         if loc.state.sane {
                             BADINPUT!(loc, "invalid distance too far back");
@@ -1204,22 +1241,49 @@ impl InflateState
                     if copy > loc.state.length {
                         copy = loc.state.length;
                     }
+
+                    if copy > loc.left {
+                        debug!("copy={} > left={}, setting copy={}", copy, loc.left, copy);
+                        copy = loc.left;
+                    }
+                    loc.left -= copy;
+                    loc.state.length -= copy;
+                    while copy > 0 {
+                        let b = from.read();
+                        // debug!("MATCH: write {}", b);
+                        loc.output_buffer[loc.put] = b;
+                        loc.put += 1;
+                        copy -= 1;
+                    }
                 }
                 else {
-                    /* copy from output */
-                    from = BufPos { buf: loc.input_buffer, pos: loc.put - loc.state.offset };
+                    // Copy data from the output buffer to the output buffer.  Because this requires copying
+                    // data within a single buffer, the compiler (rightly!) points out that we cannot alias
+                    // the output buffer for a call to copy_memory or something similar.  Also, it is legal
+                    // (and very common) for the copy to be self-overlapping, meaning the copy will repeat a
+                    // pattern into the output buffer, because we will read data that we have just written.
+                    // To do this correctly, we simply fall back to manually indexing into output_buffer.
+                    let mut from_pos = loc.put - loc.state.offset;
+                    // from = BufPos { buf: loc.input_buffer, pos: loc.put - loc.state.offset };
                     copy = loc.state.length;
+                    debug!("copy from output, copy={}", copy);
+
+                    if copy > loc.left {
+                        debug!("copy={} > left={}, setting copy={}", copy, loc.left, copy);
+                        copy = loc.left;
+                    }
+                    loc.left -= copy;
+                    loc.state.length -= copy;
+                    while copy > 0 {
+                        let b = loc.output_buffer[from_pos];
+                        from_pos += 1;
+                        // debug!("MATCH: write {}", b);
+                        loc.output_buffer[loc.put] = b;
+                        loc.put += 1;
+                        copy -= 1;
+                    }
                 }
-                if copy > loc.left {
-                    copy = loc.left;
-                }
-                loc.left -= copy;
-                loc.state.length -= copy;
-                while copy > 0 {
-                    loc.output_buffer[loc.put] = from.read();
-                    loc.put += 1;
-                    copy -= 1;
-                }
+
                 if loc.state.length == 0 {
                     loc.state.mode = InflateMode::LEN;
                 }
@@ -1229,6 +1293,7 @@ impl InflateState
                 if loc.left == 0 {
                     return inf_leave(loc);
                 }
+                // debug!("LIT: write {}", loc.state.length as u8);
                 loc.output_buffer[loc.put] = loc.state.length as u8;
                 loc.put += 1;
                 loc.left -= 1;
@@ -1236,15 +1301,14 @@ impl InflateState
             }
 
             InflateMode::CHECK => {
-                unimplemented!(); /*
-                let mut from: uint; // index into loc.input_buffer
+                // let mut from: uint; // index into loc.input_buffer
                 if loc.state.wrap != 0 {
                     NEEDBITS!(loc, 32);
                     loc.out -= loc.left;
-                    loc.strm.total_out += loc.out;
+                    loc.strm.total_out += loc.out as u64;
                     loc.state.total += loc.out;
                     if loc.out != 0 {
-                        let check = UPDATE(loc.state.check, (loc.put - loc.out) as u32, loc.out);
+                        let check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice(loc.put - loc.out, loc.put));
                         loc.strm.adler = check;
                         loc.state.check = check;
                     }
@@ -1263,8 +1327,8 @@ impl InflateState
                     debug!("inflate:   check matches trailer");
                 }
     // #ifdef GUNZIP
-                loc.state.mode = LENGTH;
-                */
+                goto_mode!(loc, LENGTH);
+
             }
 
             InflateMode::LENGTH => {
@@ -1280,13 +1344,11 @@ impl InflateState
                     debug!("LENGTH: no length in stream");
                 }
     // #endif
-                loc.state.mode = InflateMode::DONE;
+                goto_mode!(loc, DONE);
             }
 
             InflateMode::DONE => {
-                unimplemented!(); /*
-                ret = Z_STREAM_END;
-                return inf_leave(loc); */
+                return inf_leave(loc);
             }
 
             InflateMode::BAD => {
@@ -1315,9 +1377,10 @@ impl InflateState
                 }
             }
 
-            if loc.state.mode != oldmode {
-                debug!("mode {} --> {}", oldmode, loc.state.mode);
-            }
+            // if loc.state.mode != oldmode {
+            //     debug!("mode {} --> {}", oldmode, loc.state.mode);
+            // }
+
             // continue processing
         }
     }
@@ -1448,19 +1511,26 @@ void makefixed()
 // upon return from inflate(), and since all distances after the first 32K of
 // output will fall in the output data, making match copies simpler and faster.
 // The advantage may be dependent on the size of the processor's data caches.
+//
+//      end - the index within loc.output_buffer where the source data ENDS
+//      copy - the length of the data that was just written to loc.output_buffer,
+//          and so which is now available to copy into the window
+//
 fn updatewindow(loc: &mut InflateLocals, end: uint, copy: uint)
 {
-    debug!("updatewindow: end = {}, copy = {}", end, copy);
+    debug!("updatewindow: copy={}", copy);
 
     let mut copy = copy;
     let mut dist: uint;
 
     /* if it hasn't been done already, allocate space for the window */
-    loc.state.window.clear();
-    loc.state.window.grow(1 << loc.state.wbits, 0);
+
+    // loc.state.window.clear();
+    // loc.state.window.grow(1 << loc.state.wbits, 0);
 
     /* if window not in use yet, initialize */
     if loc.state.wsize == 0 {
+        debug!("wsize=0, initializing window, wbits={}", loc.state.wbits);
         loc.state.wsize = 1 << loc.state.wbits;
         loc.state.wnext = 0;
         loc.state.whave = 0;
@@ -1468,38 +1538,45 @@ fn updatewindow(loc: &mut InflateLocals, end: uint, copy: uint)
 
     /* copy state.wsize or less output bytes into the circular window */
     if copy >= loc.state.wsize {
-        debug!("copy >= wsize, copy = {}, wsize = {}", copy, loc.state.wsize);
+        // debug!("copy >= wsize, copy = {}, wsize = {}", copy, loc.state.wsize);
+        debug!("filling entire window");
         copy_memory(loc.state.window.as_mut_slice(), loc.output_buffer.slice(end - loc.state.wsize, end));
         loc.state.wnext = 0;
         loc.state.whave = loc.state.wsize;
     }
     else {
-        debug!("copy < wsize, copy = {}, wsize = {}", copy, loc.state.wsize);
+        // debug!("copy < wsize, copy = {}, wsize = {}", copy, loc.state.wsize);
+        debug!("partial window fill\n");
         dist = loc.state.wsize - loc.state.wnext;
         if dist > copy {
             dist = copy;
         }
-        debug!("copying from output_buffer[{}] to window[{}] length: {}", end - copy, loc.state.wnext, dist);
+        debug!("copying from output_buffer to window[{}] length: {}", loc.state.wnext, dist);
         copy_memory(
             loc.state.window.slice_mut(loc.state.wnext, loc.state.wnext + dist),
             loc.output_buffer.slice(end - copy, end - copy + dist));
         copy -= dist;
         if copy != 0 {
-            debug!("copying second chunk, from output_buffer[{}] to window[0] length: {}", end - copy, copy);
+            debug!("copying second chunk, to window start, length: {}", copy);
             copy_memory(loc.state.window.as_mut_slice(), loc.output_buffer.slice(end - copy, end));
             loc.state.wnext = copy;
             loc.state.whave = loc.state.wsize;
         }
         else {
+            debug!("no second chunk, advancing by dist={}", dist);
             loc.state.wnext += dist;
             if loc.state.wnext == loc.state.wsize {
+                debug!("wnext=wsize, so resetting wnext to 0");
                 loc.state.wnext = 0;
             }
             if loc.state.whave < loc.state.wsize {
+                debug!("whave < wsize, so advancing whave");
                 loc.state.whave += dist;
             }
         }
     }
+
+    debug!("whave={} wnext={}", loc.state.whave, loc.state.wnext);
 }
 
 /* Macros for inflate(): */
@@ -1560,16 +1637,16 @@ fn load_locals(loc: &mut InflateLocals) {
     loc.hold = loc.state.hold;
     loc.bits = loc.state.bits;
 
-    debug!("load_locals: put: {} left: {} next: {} have: {} hold: {} bits: {}",
-        loc.put, loc.left, loc.next, loc.have, loc.hold, loc.bits);
+    // debug!("load_locals: put: {} left: {} next: {} have: {} hold: {} bits: {}",
+    //     loc.put, loc.left, loc.next, loc.have, loc.hold, loc.bits);
 }
 
 /* Restore state from registers in inflate() */
 // was RESTORE
 #[inline]
 fn restore_locals(loc: &mut InflateLocals) {
-    debug!("restore_locals: put: {} left: {} next: {} have: {} hold: {} bits: {}",
-        loc.put, loc.left, loc.next, loc.have, loc.hold, loc.bits);
+    // debug!("restore_locals: put: {} left: {} next: {} have: {} hold: {} bits: {}",
+    //     loc.put, loc.left, loc.next, loc.have, loc.hold, loc.bits);
 
     loc.strm_next_out = loc.put;
     loc.strm_avail_out = loc.left;
@@ -1726,6 +1803,7 @@ struct InflateLocals<'a>
     strm_next_out: uint,
     strm_avail_out: uint,
 
+    is_goto: bool,
 }
 
 fn inf_leave(loc: &mut InflateLocals) -> InflateResult
@@ -1738,9 +1816,11 @@ fn inf_leave(loc: &mut InflateLocals) -> InflateResult
     debug!("inf_leave");
     restore_locals(loc);
 
+    debug!("left={}", loc.left);
+
     if loc.state.wsize != 0 || (loc.out != loc.strm_avail_out && (loc.state.mode as u32) < (InflateMode::BAD as u32) &&
             ((loc.state.mode as u32) < (InflateMode::CHECK as u32) || (loc.flush != Flush::Finish))) {
-        debug!("calling updatewindow(), next_out = {}, avail_out = {}, out = {}", loc.strm_next_out, loc.strm_avail_out, loc.out);
+        debug!("calling updatewindow()");
         assert!(loc.out >= loc.strm_avail_out);
         let e = loc.strm_next_out;
         let c = loc.out - loc.strm_avail_out;
@@ -1749,6 +1829,8 @@ fn inf_leave(loc: &mut InflateLocals) -> InflateResult
 
     loc.in_ -= loc.strm_avail_in;
     loc.out -= loc.strm_avail_out;
+
+    debug!("in={} out={}", loc.in_, loc.out);
 
     let in_inflated = loc.in_;
     let out_inflated = loc.out;
@@ -1770,7 +1852,16 @@ fn inf_leave(loc: &mut InflateLocals) -> InflateResult
 //        ret = Z_BUF_ERROR;
 //    }
 //
-    InflateResult::Decoded(in_inflated, out_inflated)
+
+    if in_inflated != 0 || out_inflated != 0 {
+        InflateResult::Decoded(in_inflated, out_inflated)
+    }
+    else if loc.state.mode == InflateMode::DONE {
+        InflateResult::Eof(loc.state.check)
+    }
+    else {
+        InflateResult::NeedInput
+    }
 }
 
 

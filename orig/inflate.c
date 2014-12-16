@@ -384,6 +384,8 @@ unsigned copy;
     struct inflate_state FAR *state;
     unsigned dist;
 
+    Tracevv((stderr, "updatewindow: copy=%d\n", copy));
+
     state = (struct inflate_state FAR *)strm->state;
 
     /* if it hasn't been done already, allocate space for the window */
@@ -396,6 +398,7 @@ unsigned copy;
 
     /* if window not in use yet, initialize */
     if (state->wsize == 0) {
+        Tracevv((stderr, "wsize=0, initializing window, wbits=%d\n", state->wbits));
         state->wsize = 1U << state->wbits;
         state->wnext = 0;
         state->whave = 0;
@@ -403,26 +406,40 @@ unsigned copy;
 
     /* copy state->wsize or less output bytes into the circular window */
     if (copy >= state->wsize) {
+        Tracevv((stderr, "filling entire window\n"));
         zmemcpy(state->window, end - state->wsize, state->wsize);
         state->wnext = 0;
         state->whave = state->wsize;
     }
     else {
+        Tracevv((stderr, "partial window fill\n"));
         dist = state->wsize - state->wnext;
         if (dist > copy) dist = copy;
+
+        Tracevv((stderr, "copying from output_buffer to window[%d] length: %d\n", state->wnext, dist));
+
         zmemcpy(state->window + state->wnext, end - copy, dist);
         copy -= dist;
         if (copy) {
+            Tracevv((stderr, "copying second chunk, to window start, length: %d\n", copy));
             zmemcpy(state->window, end - copy, copy);
             state->wnext = copy;
             state->whave = state->wsize;
         }
         else {
+            Tracevv((stderr, "no second chunk, advancing by dist=%d\n", dist));
             state->wnext += dist;
-            if (state->wnext == state->wsize) state->wnext = 0;
-            if (state->whave < state->wsize) state->whave += dist;
+            if (state->wnext == state->wsize) {
+                Tracevv((stderr, "wnext=wsize, so resetting wnext to 0\n"));
+                state->wnext = 0;
+            }
+            if (state->whave < state->wsize) {
+                Tracevv((stderr, "whave < wsize, so advancing whave\n"));
+                state->whave += dist;
+            }
         }
     }
+    Tracevv((stderr, "whave=%d wnext=%d\n", state->whave, state->wnext));
     return 0;
 }
 
@@ -625,6 +642,8 @@ int flush;
     static const unsigned short order[19] = /* permutation of code lengths */
         {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
 
+    Tracevv((stderr, "inflate: avail_in=%d avail_out=%d\n", strm->avail_in, strm->avail_out));
+
     if (strm == Z_NULL || strm->state == Z_NULL || strm->next_out == Z_NULL ||
         (strm->next_in == Z_NULL && strm->avail_in != 0))
         return Z_STREAM_ERROR;
@@ -635,7 +654,8 @@ int flush;
     in = have;
     out = left;
     ret = Z_OK;
-    for (;;)
+    for (;;) {
+        Tracevv((stderr, "inflate: mode=%d\n", state->mode));
         switch (state->mode) {
         case HEAD:
             if (state->wrap == 0) {
@@ -1019,7 +1039,9 @@ int flush;
         case LEN_:
             state->mode = LEN;
         case LEN:
-            if (have >= 6 && left >= 258) {
+            Tracevv((stderr, "LEN: left=%d\n", left));
+            if (have >= 6 && left >= 258 && 0) { // rust port's inflate_fast is not correct yet
+                Tracevv((stderr, "LEN: fast path\n"));
                 RESTORE();
                 inflate_fast(strm, out);
                 LOAD();
@@ -1027,6 +1049,7 @@ int flush;
                     state->back = -1;
                 break;
             }
+            Tracevv((stderr, "LEN: slow path\n"));
             state->back = 0;
             for (;;) {
                 here = state->lencode[BITS(state->lenbits)];
@@ -1068,6 +1091,7 @@ int flush;
             state->extra = (unsigned)(here.op) & 15;
             state->mode = LENEXT;
         case LENEXT:
+            Tracevv((stderr, "LENEXT: extra=%d\n", state->extra));
             if (state->extra) {
                 NEEDBITS(state->extra);
                 state->length += BITS(state->extra);
@@ -1121,10 +1145,15 @@ int flush;
             Tracevv((stderr, "inflate:         distance %u\n", state->offset));
             state->mode = MATCH;
         case MATCH:
-            if (left == 0) goto inf_leave;
+            if (left == 0) {
+                Tracevv((stderr, "MATCH: inf_leave\n"));
+                goto inf_leave;
+            }
             copy = out - left;
+            Tracevv((stderr, "copy=%d state.offset=%d\n", copy, state->offset));
             if (state->offset > copy) {         /* copy from window */
                 copy = state->offset - copy;
+                Tracevv((stderr, "copy from window, copy=%d\n", copy));
                 if (copy > state->whave) {
                     if (state->sane) {
                         strm->msg = (char *)"invalid distance too far back";
@@ -1156,17 +1185,23 @@ int flush;
             else {                              /* copy from output */
                 from = put - state->offset;
                 copy = state->length;
+                Tracevv((stderr, "copy from output, copy=%d\n", copy));
             }
-            if (copy > left) copy = left;
+            if (copy > left) {
+                Tracevv((stderr, "copy=%d > left=%d, setting copy=%d\n", copy, left, copy));
+                copy = left;
+            }
             left -= copy;
             state->length -= copy;
             do {
+                // Tracevv((stderr, "MATCH: write %d\n", *from));
                 *put++ = *from++;
             } while (--copy);
             if (state->length == 0) state->mode = LEN;
             break;
         case LIT:
             if (left == 0) goto inf_leave;
+            // Tracevv((stderr, "LIT: write %d\n", (unsigned char)(state->length)));
             *put++ = (unsigned char)(state->length);
             left--;
             state->mode = LEN;
@@ -1220,7 +1255,7 @@ int flush;
         default:
             return Z_STREAM_ERROR;
         }
-
+    }
     /*
        Return from inflate(), updating the total counts and the check value.
        If there was no progress during the inflate() call, return a buffer
@@ -1228,15 +1263,22 @@ int flush;
        Note: a memory error from inflate() is non-recoverable.
      */
   inf_leave:
+    Tracevv((stderr, "inf_leave\n"));
     RESTORE();
+    Tracevv((stderr, "left=%d\n", left));
     if (state->wsize || (out != strm->avail_out && state->mode < BAD &&
-            (state->mode < CHECK || flush != Z_FINISH)))
+        (state->mode < CHECK || flush != Z_FINISH))) {
+        Tracevv((stderr, "calling updatewindow()\n"));
         if (updatewindow(strm, strm->next_out, out - strm->avail_out)) {
             state->mode = MEM;
             return Z_MEM_ERROR;
         }
+    }
     in -= strm->avail_in;
     out -= strm->avail_out;
+
+    Tracevv((stderr, "in=%d out=%d\n", in, out));
+
     strm->total_in += in;
     strm->total_out += out;
     state->total += out;

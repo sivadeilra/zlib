@@ -49,7 +49,7 @@ pub fn inflate_table(
     work: &mut [u16])
     -> (int /*error*/, uint /*bits*/)
 {
-    debug!("inflate_table: ctype {}, codes {}, bits {}", ctype as u32, codes, bits);
+    // debug!("inflate_table: ctype {}, codes {}, bits {}", ctype as u32, codes, bits);
     static LBASE :[u16, ..31] = [ /* Length codes 257..285 base */
         3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
         35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258, 0, 0];
@@ -351,6 +351,6 @@ pub fn inflate_table(
 
     /* set return parameters */
     *table_pos += used;
-    debug!("done.  table_pos = {}, used = {}, root = {}", *table_pos, used, root);
+    // debug!("done.  table_pos = {}, used = {}, root = {}", *table_pos, used, root);
     return (0, root);
 }
