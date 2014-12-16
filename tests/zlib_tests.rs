@@ -11,6 +11,7 @@ use zlib::ZStream;
 use zlib::inflate;
 use zlib::inflate::InflateState;
 use zlib::inflate::InflateResult;
+use zlib::inflate::InflateReader;
 
 const INBUF_SIZE :uint = 0x1000;
 const OUTBUF_SIZE :uint = 0x1000;
@@ -151,3 +152,65 @@ fn test_inflate(in_bufsize: uint, out_bufsize: uint)
     }
 }
 
+
+#[test]
+fn test_inflate_reader_basic()
+{
+    test_inflate_reader(0x1000, 0x1000);
+}
+
+fn test_inflate_reader(in_bufsize: uint, out_bufsize: uint)
+{
+    let input_path = Path::new("tests/hamlet.tar.gz");
+    let check_path = Path::new("tests/hamlet.tar");			// contains the expected (good) output
+
+    // open compressed input file
+    let mut input_file = io::BufferedReader::new(unwrap_or_warn(io::File::open(&input_path)));
+
+    // open known-good input file
+    let mut check_file = io::BufferedReader::new(unwrap_or_warn(io::File::open(&check_path)));
+
+	println!("successfully opened test files");
+
+    // create an InflateReader over the input file
+    let mut inflater = InflateReader::new(in_bufsize, 2, box input_file);
+
+    let mut output_buffer: Vec<u8> = Vec::with_capacity(out_bufsize);
+    let mut check_buffer: Vec<u8> = Vec::new();
+
+    loop {
+        // println!("decode loop: avail_in = {}, next_in = {}, avail_out = {}, next_out = {}",
+        //     strm.avail_in, strm.next_in, strm.avail_out, strm.next_out);
+
+        // let total_out: u64 = strm.total_out;
+
+        let mut total_out: u64 = 0;
+
+        match inflater.push(out_bufsize, &mut output_buffer) {
+            Ok(output_bytes_written) => {
+                println!("inflate reader returned {} bytes", output_bytes_written);
+
+                // Check the data that we just received against the same data in the known-good file.
+                if (output_bytes_written != 0) {
+                	assert!(check_buffer.len() == 0);
+                	let check_bytes_read = check_file.push(output_bytes_written, &mut check_buffer).unwrap();
+                	assert!(check_bytes_read == output_bytes_written);
+                	for i in range(0, output_bytes_written) {
+                		if check_buffer[i] != output_buffer[i] {
+                			panic!("outputs differ!  at output offset {}, expected {} found {}", total_out + (i as u64), check_buffer[i], output_buffer[i]);
+                		}
+                	}
+
+					check_buffer.clear();
+                    output_buffer.clear();
+                }
+
+                total_out += output_bytes_written as u64;
+            }
+            Err(_) => {
+                println!("push() returned error, assuming EOF for now");
+                break;
+            }
+        }
+    }
+}

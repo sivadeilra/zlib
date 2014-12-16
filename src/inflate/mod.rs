@@ -21,10 +21,14 @@ use Z_DEFLATED;
 use WINDOW_BITS_MIN;
 use WINDOW_BITS_MAX;
 
+pub use self::reader::InflateReader;
+
 const DEFAULT_DMAX: uint = 32768;
 
 mod inffast;
 mod inftrees;
+mod reader;
+
 
 macro_rules! BADINPUT {
     ($loc:expr, $msg:expr) => {
