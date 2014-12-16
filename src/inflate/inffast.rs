@@ -131,6 +131,8 @@ pub fn inflate_fast(
     strm: &mut ZStream,
     input_buffer: &[u8],
     output_buffer: &mut [u8],
+    strm_next_in: &mut uint,
+    strm_avail_in: &mut uint,
     start: uint)                 /* inflate()'s starting value for strm.avail_out */
 {
     // copy state to local variables
@@ -159,14 +161,14 @@ pub fn inflate_fast(
 
     let mut input = InputState {
         buf: input_buffer,
-        pos: strm.next_in,
+        pos: *strm_next_in,
         hold: state.hold,
         bits: state.bits,
     };
-    let last: uint = input.pos + (strm.avail_in - 5);     // (index into input_buffer) have enough input while in < last
+    let last: uint = input.pos + (*strm_avail_in - 5);     // (index into input_buffer) have enough input while in < last
 
     debug!("starting inflate_fast");
-    debug!("    total_in: {}, next_in: {}", strm.total_in, strm.next_in);
+    debug!("    total_in: {}, next_in: {}", strm.total_in, *strm_next_in);
     debug!("    wsize = {}, whave = {}, wnext = {}, window buffer size = {}", wsize, whave, wnext, window.len());
     debug!("    hold = 0x{:08x}, bits = {}", input.hold, input.bits);
     debug!("    beg = {}, end = {}", beg, end);
@@ -540,21 +542,21 @@ pub fn inflate_fast(
     input.hold &= (1 << input.bits) - 1;
 
     // we expect to have advanced state
-    debug!("    input.pos = {}, strm.next_in = {}", input.pos, strm.next_in);
-    assert!(input.pos > strm.next_in || out.pos > strm.next_out);
+    debug!("    input.pos = {}, strm.next_in = {}", input.pos, *strm_next_in);
+    assert!(input.pos > *strm_next_in || out.pos > strm.next_out);
 
     // update state and return
-    strm.next_in = input.pos;
+    *strm_next_in = input.pos;
     strm.next_out = out.pos;
-    strm.avail_in = if input.pos < last { 5 + (last - input.pos) } else { 5 - (input.pos - last) };
+    *strm_avail_in = if input.pos < last { 5 + (last - input.pos) } else { 5 - (input.pos - last) };
     strm.avail_out = if out.pos < end { 257 + (end - out.pos) } else { 257 - (out.pos - end) };
     state.hold = input.hold;
     state.bits = input.bits;
 
     debug!("done.  strm {{ next_in: {}, next_out: {}, avail_in: {}, avail_out: {} }}",
-        strm.next_in,
+        *strm_next_in,
         strm.next_out,
-        strm.avail_in,
+        *strm_avail_in,
         strm.avail_out);
 
     Tracevv!("done.  avail_in: {}, avail_out: {}", strm.avail_in, strm.avail_out);

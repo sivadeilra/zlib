@@ -31,6 +31,11 @@ const DYN_TREES: uint = 2;
 
 pub const PRESET_DICT: uint = 0x20; /* preset dictionary flag in zlib header */
 
+pub const WINDOW_BITS_MIN: uint = 8;
+pub const WINDOW_BITS_MAX: uint = 15;
+pub const WINDOW_BITS_DEFAULT: uint = WINDOW_BITS_MAX;
+
+
 #[deriving(Copy,Show,Eq,PartialEq)]
 pub enum WrapKind {
     Zlib,
@@ -38,8 +43,8 @@ pub enum WrapKind {
 }
 
 pub struct ZStream {
-    pub next_in: uint,          // index of next input byte, within input_buffer (passed elsewhere)
-    pub avail_in: uint,         // number of bytes available at next_in
+    // pub next_in: uint,          // index of next input byte, within input_buffer (passed elsewhere)
+    // pub avail_in: uint,         // number of bytes available at next_in
     pub total_in: u64,         // total number of input bytes read so far
     pub next_out: uint,         // position within output_buffer where to write the next byte
     pub avail_out: uint,        // remaining free space at next_out
@@ -47,6 +52,24 @@ pub struct ZStream {
     pub msg: Option<String>,    // last error message, if any
     pub data_type :uint,        // best guess about the data type: binary or text
     pub adler: u32              // adler32 value of the uncompressed data
+}
+
+impl ZStream
+{
+    pub fn new() -> ZStream
+    {
+        ZStream {
+            // next_in: 0,
+            // avail_in: 0,
+            total_in: 0,
+            next_out: 0,
+            avail_out: 0,
+            total_out: 0,
+            msg: None,
+            data_type: 0,  /* best guess about the data type: binary or text */
+            adler: 0,      /* adler32 value of the uncompressed data */
+        }
+    }
 }
 
 /// gzip header information passed to and from zlib routines.  See RFC 1952
@@ -156,24 +179,6 @@ pub const Z_UNKNOWN  :uint = 2;
 pub const Z_DEFLATED :uint = 8;
 /* The deflate compression method (the only one supported in this version) */
 
-
-impl ZStream
-{
-    pub fn new() -> ZStream
-    {
-        ZStream {
-            next_in: 0,
-            avail_in: 0,
-            total_in: 0,
-            next_out: 0,
-            avail_out: 0,
-            total_out: 0,
-            msg: None,
-            data_type: 0,  /* best guess about the data type: binary or text */
-            adler: 0,      /* adler32 value of the uncompressed data */
-        }
-    }
-}
 
 
 /* Maximum value for windowBits in deflateInit2 and inflateInit2.

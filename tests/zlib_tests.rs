@@ -6,6 +6,7 @@ use std::fmt::Show;
 use std::io;
 use std::os;
 
+use zlib::WINDOW_BITS_DEFAULT;
 use zlib::ZStream;
 use zlib::inflate;
 use zlib::inflate::InflateState;
@@ -15,17 +16,6 @@ const INBUF_SIZE :uint = 0x1000;
 const OUTBUF_SIZE :uint = 0x1000;
 
 #[allow(unused_variables)]
-
-/*
-fn str_match_start(s: &str, prefix: &str) -> Option<&str> {
-    if s.starts_with(prefix) {
-        Some(s.slice_from(prefix.len()))
-    }
-    else {
-        None
-    }
-}
-*/
 
 fn unwrap_or_warn<T,E:Show>(op: Result<T,E>) -> T
 {
@@ -38,35 +28,54 @@ fn unwrap_or_warn<T,E:Show>(op: Result<T,E>) -> T
 }
 
 #[test]
-fn test_inflate() {
+fn test_inflate_large_bufs() 
+{
+	test_inflate(0x10000, 0x10000); // 64 KB
+}
 
-    let input_filename = "tests/hamlet.tar.gz";
-    let output_filename = "tests/out.tar";
+#[test]
+fn test_inflate_tiny_bufs()
+{
+	test_inflate(0x40, 0x40); // 64 bytes
+}
 
-    let input_path = Path::new(&input_filename);
-    let input_file = unwrap_or_warn(io::File::open(&input_path));
-    let mut input_reader = io::BufferedReader::new(input_file);
+#[test]
+fn test_tiny_inbuf_large_outbuf()
+{
+	test_inflate(0x40, 0x10000);
+}
 
-    // Open the output file
-    let output_path = Path::new(&output_filename);
-    let output_file = unwrap_or_warn(io::File::create(&output_path));
-    let mut output_writer = io::BufferedWriter::new(output_file);
+#[test]
+fn test_large_inbuf_tiny_outbuf()
+{
+	test_inflate(0x40, 0x10000);
+}
 
-    let mut good_buffer: Vec<u8> = Vec::new();
+fn test_inflate(in_bufsize: uint, out_bufsize: uint)
+{
+    let input_path = Path::new("tests/hamlet.tar.gz");
+    let check_path = Path::new("tests/hamlet.tar");			// contains the expected (good) output
+
+    // open compressed input file
+    let mut input_file = io::BufferedReader::new(unwrap_or_warn(io::File::open(&input_path)));
+
+    // open known-good input file
+    let mut check_file = io::BufferedReader::new(unwrap_or_warn(io::File::open(&check_path)));
+
 
 	println!("successfully opened test files");
 
-    let mut in_buffer: Vec<u8> = Vec::with_capacity(INBUF_SIZE);
-    let mut out_buffer: Vec<u8> = Vec::with_capacity(OUTBUF_SIZE);
+    let mut input_buffer: Vec<u8> = Vec::with_capacity(in_bufsize);
+    let mut output_buffer: Vec<u8> = Vec::with_capacity(out_bufsize);
+    output_buffer.grow(out_bufsize, 0);
+    let mut check_buffer: Vec<u8> = Vec::new();
 
-    in_buffer.grow(INBUF_SIZE, 0);
-    out_buffer.grow(OUTBUF_SIZE, 0);
+    let mut input_pos: uint = 0; // index of next byte in input_buffer to read
 
-    let in_data = in_buffer.as_mut_slice();
-    let out_data = out_buffer.as_mut_slice();
+    let out_data = output_buffer.as_mut_slice();
 
     let mut strm = ZStream::new();
-    let mut state = InflateState::new(zlib::inflate::WINDOW_BITS_DEFAULT, 2);
+    let mut state = InflateState::new(WINDOW_BITS_DEFAULT, 2);
     let mut input_eof = false;
     let mut loop_count: uint = 0;
 
@@ -75,27 +84,21 @@ fn test_inflate() {
         // println!("decode loop: avail_in = {}, next_in = {}, avail_out = {}, next_out = {}",
         //     strm.avail_in, strm.next_in, strm.avail_out, strm.next_out);
 
-        if strm.avail_in == 0 && !input_eof {
+        if input_pos == input_buffer.len() && !input_eof {
             // println!("input buffer is empty; loading data");
-            match input_reader.read(in_data) {
-                Ok(bytes_read) => {
-                    assert!(bytes_read > 0);
-                    println!("zlibtest: loaded {} input bytes", bytes_read);
-                    strm.next_in = 0;
-                    strm.avail_in = bytes_read;
-                },
-                Err(_) => {
-                    input_eof = true;
-                    println!("input error (assuming eof)");
-                }
-            }
+            let bytes_read = input_file.push(in_bufsize, &mut input_buffer).unwrap();
+            assert!(bytes_read > 0);
+            input_pos = 0;
+            println!("loaded {} input bytes", bytes_read);
         }
 
         // give it some output buffer
         strm.avail_out = out_data.len();
         strm.next_out = 0;
 
-        match state.inflate(&mut strm, None, in_data, out_data) {
+        let total_out: u64 = strm.total_out;
+
+        match state.inflate(&mut strm, None, input_buffer.slice_from(input_pos), out_data) {
             InflateResult::Eof(crc) => {
                 println!("Eof");
                 break;
@@ -110,16 +113,27 @@ fn test_inflate() {
                 // println!("InflateDecoded: input_bytes_read: {} output_bytes_written: {}", input_bytes_read, output_bytes_written);                
                 println!("zlibtest: next_out = {}, avail_out = {}", strm.next_out, strm.avail_out);
 
+                assert!(input_bytes_read + input_pos <= input_buffer.len());
+                input_pos += input_bytes_read;
+
+                // Check the data that we just received against the same data in the known-good file.
+                if (output_bytes_written != 0) {
+                	assert!(check_buffer.len() == 0);
+                	let check_bytes_read = check_file.push(output_bytes_written, &mut check_buffer).unwrap();
+                	assert!(check_bytes_read == output_bytes_written);
+                	for i in range(0, output_bytes_written) {
+                		if check_buffer[i] != out_data[i] {
+                			panic!("outputs differ!  at output offset {}, expected {} found {}", total_out + (i as u64), check_buffer[i], out_data[i]);
+                		}
+                	}
+
+					check_buffer.clear();
+                }
+
                 loop_count += 1;
                 if loop_count >= 4 {
                     println!("stopping");
                     break;
-                }
-
-                if strm.next_out != 0 {
-                    // Write the decoded contents to the output file
-                    output_writer.write(out_data.slice(0, strm.next_out)).unwrap();                    
-                    output_writer.flush().unwrap();
                 }
             }
 

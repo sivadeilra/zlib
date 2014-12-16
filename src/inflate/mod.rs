@@ -18,6 +18,8 @@ use DEF_WBITS;
 use swap32;
 use Flush;
 use Z_DEFLATED;
+use WINDOW_BITS_MIN;
+use WINDOW_BITS_MAX;
 
 const DEFAULT_DMAX: uint = 32768;
 
@@ -208,7 +210,7 @@ enum InflateMode {
 /// Use InflateState::new() to create a stream.
 pub struct InflateState // was inflate_state
 {
-    mode: InflateMode,              // current inflate mode
+    mode: InflateMode,          // current inflate mode
     last: bool,                 // true if processing last block
     wrap: u32,                  // bit 0 true for zlib, bit 1 true for gzip
     havedict: bool,             // true if dictionary provided
@@ -255,10 +257,6 @@ pub struct InflateState // was inflate_state
     back: uint,                 // bits back of last unprocessed length/lit
     was: uint,                  // initial length of match
 }
-
-pub const WINDOW_BITS_MIN: uint = 8;
-pub const WINDOW_BITS_MAX: uint = 15;
-pub const WINDOW_BITS_DEFAULT: uint = WINDOW_BITS_MAX;
 
 impl InflateState
 {
@@ -450,7 +448,9 @@ impl InflateState
             put: 0,
             in_: 0,
             out: 0,
-            flush: flush
+            flush: flush,
+            strm_next_in: 0,
+            strm_avail_in: input_buffer.len()
         };
         let loc = &mut locs;
 
@@ -1056,7 +1056,10 @@ impl InflateState
             InflateMode::LEN => {
                 if loc.have >= 6 && loc.left >= 258 {
                     restore_locals(loc);
-                    inflate_fast(loc.state, loc.strm, loc.input_buffer, loc.output_buffer, loc.out);
+                    inflate_fast(loc.state, loc.strm, loc.input_buffer, loc.output_buffer, 
+                        &mut loc.strm_next_in,
+                        &mut loc.strm_avail_in,
+                        loc.out);
                     load_locals(loc);
                     if loc.state.mode == InflateMode::TYPE {
                         loc.state.back = -1;
@@ -1566,8 +1569,8 @@ fn crc4(check: u32, word: u32) -> u32
 fn load_locals(loc: &mut InflateLocals) {
     loc.put = loc.strm.next_out;
     loc.left = loc.strm.avail_out;
-    loc.next = loc.strm.next_in;
-    loc.have = loc.strm.avail_in;
+    loc.next = loc.strm_next_in;
+    loc.have = loc.strm_avail_in;
     loc.hold = loc.state.hold;
     loc.bits = loc.state.bits;
 
@@ -1584,8 +1587,8 @@ fn restore_locals(loc: &mut InflateLocals) {
 
     loc.strm.next_out = loc.put;
     loc.strm.avail_out = loc.left;
-    loc.strm.next_in = loc.next;
-    loc.strm.avail_in = loc.have;
+    loc.strm_next_in = loc.next;
+    loc.strm_avail_in = loc.have;
     loc.state.hold = loc.hold;
     loc.state.bits = loc.bits;
 }
@@ -1734,7 +1737,11 @@ struct InflateLocals<'a>
     in_ :uint,          // save starting available input
     out :uint,          // save starting available output
 
-    flush: Flush
+    flush: Flush,
+
+    strm_next_in: uint,
+    strm_avail_in: uint,
+
 }
 
 fn inf_leave(loc: &mut InflateLocals) -> InflateResult
@@ -1757,7 +1764,7 @@ fn inf_leave(loc: &mut InflateLocals) -> InflateResult
         updatewindow(loc, e, c);
     }
 
-    loc.in_ -= loc.strm.avail_in;
+    loc.in_ -= loc.strm_avail_in;
     loc.out -= loc.strm.avail_out;
 
     let in_inflated = loc.in_;

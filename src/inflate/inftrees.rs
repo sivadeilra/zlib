@@ -43,14 +43,13 @@ pub fn inflate_table(
     ctype: CodeType,
     lens: &[u16],
     codes: uint,
-    table: &mut [Code],     // code FAR * FAR *table; // array of indices now?
-    table_pos: &mut uint,        // index into 'table'
+    table: &mut [Code],
+    table_pos: &mut uint,       // index into 'table'
     bits: uint,
     work: &mut [u16])
     -> (int /*error*/, uint /*bits*/)
 {
     debug!("inflate_table: ctype {}, codes {}, bits {}", ctype as u32, codes, bits);
-    let mut end :int;       // use base and extra for symbol > end
     static LBASE :[u16, ..31] = [ /* Length codes 257..285 base */
         3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
         35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258, 0, 0];
@@ -97,8 +96,8 @@ pub fn inflate_table(
        decoding tables.
      */
 
-    /* accumulate lengths for codes (assumes lens[] all in 0..MAXBITS) */
-    let mut count = [0u16, ..MAXBITS+1];    /* number of codes of each length */
+    // accumulate lengths for codes (assumes lens[] all in 0..MAXBITS)
+    let mut count = [0u16, ..MAXBITS+1]; // number of codes of each length
     for sym in range(0, codes) {
         count[lens[sym] as uint] += 1;
     }
@@ -108,7 +107,7 @@ pub fn inflate_table(
     //     debug!("    count[{}] = {}", i, count[i]);
     // }
 
-    /* bound code lengths, force root to be within code lengths */
+    // bound code lengths, force root to be within code lengths
     let mut max :uint = MAXBITS;      // maximum code lengths
     while max >= 1 {
         if count[max] != 0 {
@@ -120,12 +119,8 @@ pub fn inflate_table(
     if max == 0 {
         // no symbols to code at all
         debug!("max == 0, so there are no symbols to code at all");
-        let here = Code {
-            op: 64,    /* invalid code marker */
-            bits: 1,
-            val: 0,
-        };
-        /* make a table to force an error */
+        let here = Code { op: 64, bits: 1, val: 0, }; // invalid code marker
+        // make a table to force an error
         table[*table_pos] = here; *table_pos += 1;
         table[*table_pos] = here; *table_pos += 1;
         return (0, 1);     /* no symbols, but wait for decoding to report error */
@@ -149,40 +144,42 @@ pub fn inflate_table(
 
     // debug!("root {}, min {}, max {}", root, min, max);
 
-    /* check for an over-subscribed or incomplete set of lengths */
+    // check for an over-subscribed or incomplete set of lengths
     {
-        let mut left: int = 1;                   /* number of prefix codes available */
+        let mut left: i32 = 1; // number of prefix codes available
         for len in range_inclusive(1, MAXBITS) {
             left <<= 1;
-            left -= count[len] as int;
+            left -= count[len] as i32;
             if left < 0 {
                 warn!("over-subscribed");
-                return (-1, bits);        /* over-subscribed */
+                return (-1, bits); // over-subscribed
             }
         }
         if left > 0 && (ctype == CODES || max != 1) {
             warn!("incomplete set of lengths");
-            return (-1, bits);                      /* incomplete set */
+            return (-1, bits); // incomplete set
         }
     }
 
-    /* generate offsets into symbol table for each length for sorting */
-    let mut offs = [0u16, ..MAXBITS+1];     /* offsets in table for each length */
+    // generate offsets into symbol table for each length for sorting
+    let mut offs = [0u16, ..MAXBITS+1];     // offsets in table for each length
     offs[1] = 0;
     for len in range(1, MAXBITS) {
         offs[len + 1] = offs[len] + count[len];
     }
 
-    /* sort symbols by length, by symbol order within each length */
-    for sym in range(0, codes) {
-        if lens[sym] != 0 {
-            work[offs[lens[sym] as uint] as uint] = sym as u16;
-            offs[lens[sym] as uint] += 1;
+    // sort symbols by length, by symbol order within each length
+    for sym in range(0u16, codes as u16) {
+        let symlen = lens[sym as uint] as uint;
+        if symlen != 0 {
+            let symoff = offs[symlen] as uint;
+            work[symoff] = sym;
+            offs[symlen] += 1;
         }
     }
 
     // Create and fill in decoding tables.  In this loop, the table being
-    // filled is at next and has curr index bits.  The code being used is huff
+    // filled is at table[next] and has curr index bits.  The code being used is huff
     // with length len.  That code is converted to an index by dropping drop
     // bits off of the bottom.  For codes where len is less than drop + curr,
     // those top drop + curr - len bits are incremented through all values to
@@ -210,43 +207,26 @@ pub fn inflate_table(
     // routine permits incomplete codes, so another loop after this one fills
     // in the rest of the decoding tables with invalid code markers.
 
-    // set up for code type
-    let mut base: &[u16];           // base value table to use
-    let mut base_bias: int;         // offset into 'base' to use, can be negative
-    let mut extra: &[u16];          // extra bits table to use
-    let mut extra_bias: int;        // offset into 'extra' to use, can be negative
-    match ctype {
-        CODES => {
-            static EMPTY_U16: [u16, ..0] = [];
-            base = EMPTY_U16.as_slice();        // dummy value--not used
-            base_bias = 0;
-            extra = EMPTY_U16.as_slice();       // dummy value--not used
-            extra_bias = 0;
-            end = 19;
-        }
-        LENS => {
-            base = LBASE.as_slice();
-            base_bias = -257;
-            extra = LEXT.as_slice();
-            extra_bias = -257;
-            end = 256;
-        }
-        _ => { /* DISTS */
-            base = DBASE.as_slice();
-            base_bias = 0;
-            extra = DEXT.as_slice();
-            extra_bias = 0;
-            end = -1;
-        }
-    }
+    static EMPTY_U16: [u16, ..0] = [];
+
+    let (base,              // base value table to use
+        base_bias,          // offset into 'base' to use, can be negative
+        extra,              // extra bits table to use
+        extra_bias,         // offset into 'extra' to use, can be negative
+        end)                // use base and extra for symbol > end
+        = match ctype {
+        CODES => (EMPTY_U16.as_slice(), 0, EMPTY_U16.as_slice(), 0, 19),    // base/extra not used
+        LENS => (LBASE.as_slice(), -257, LEXT.as_slice(), -257, 256),
+        _ /* DISTS */ => (DBASE.as_slice(), 0, DEXT.as_slice(), 0, -1)
+    };
 
     // debug!("base.len = {}, extra.len = {}", base.len(), extra.len());
 
-    /* initialize state for loop */
+    // initialize state for loop
     let mut used :uint = 1 << root;     // code entries in table used; use root table entries
     let mask :uint = used - 1;          // mask for comparing low root bits
 
-    /* check available table space */
+    // check available table space
     if (ctype == LENS && used > ENOUGH_LENS) ||
         (ctype == DISTS && used > ENOUGH_DISTS) {
         warn!("too many positions used");
@@ -261,7 +241,7 @@ pub fn inflate_table(
     let mut drop :uint = 0;             // code bits to drop for sub-table; current bits to drop from code for index
     let mut low :uint = !0u;            // low bits for current root entry; trigger new sub-table when len > root
 
-    /* process all codes and make table entries */
+    // process all codes and make table entries
     // debug!("processing codes");
     loop {
         /* create table entry */
@@ -341,18 +321,20 @@ pub fn inflate_table(
                 left <<= 1;
             }
 
-            /* check for enough space */
+            // check for enough space
             used += 1 << curr;
             if (ctype == LENS && used > ENOUGH_LENS) ||
                 (ctype == DISTS && used > ENOUGH_DISTS) {
                 return (1, bits);
             }
 
-            /* point entry in root table to sub-table */
+            // point entry in root table to sub-table
             low = huff & mask;
-            table[*table_pos + low].op = curr as u8;
-            table[*table_pos + low].bits = root as u8;
-            table[*table_pos + low].val = (next - *table_pos) as u16;
+            table[*table_pos + low] = Code {
+                op: curr as u8,
+                bits: root as u8,
+                val: (next - *table_pos) as u16
+            };
         }
     }
 
