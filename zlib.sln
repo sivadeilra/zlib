@@ -1,13 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.30723.0
+VisualStudioVersion = 12.0.21005.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "src", "orig\src.vcxproj", "{290BE49D-25A9-43CB-BCC3-A8F4A2EABE51}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cargo_build", "cargo_build\cargo_build.vcxproj", "{2F9A4B11-4327-45B2-864A-FDA7082A0D03}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cpp_test", "cpp_test\cpp_test.vcxproj", "{3C7CC5B6-9D6F-404B-9D91-BF5DB86F432D}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "zlibtest", "tests\zlibtest\zlibtest.vcxproj", "{1C1C17F0-A139-4CF5-92F7-92C03F238AEA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -31,12 +31,14 @@ Global
 		{2F9A4B11-4327-45B2-864A-FDA7082A0D03}.Release|Win32.ActiveCfg = Release|Win32
 		{2F9A4B11-4327-45B2-864A-FDA7082A0D03}.Release|Win32.Build.0 = Release|Win32
 		{2F9A4B11-4327-45B2-864A-FDA7082A0D03}.Release|x64.ActiveCfg = Release|Win32
-		{3C7CC5B6-9D6F-404B-9D91-BF5DB86F432D}.Debug|Win32.ActiveCfg = Debug|Win32
-		{3C7CC5B6-9D6F-404B-9D91-BF5DB86F432D}.Debug|Win32.Build.0 = Debug|Win32
-		{3C7CC5B6-9D6F-404B-9D91-BF5DB86F432D}.Debug|x64.ActiveCfg = Debug|Win32
-		{3C7CC5B6-9D6F-404B-9D91-BF5DB86F432D}.Release|Win32.ActiveCfg = Release|Win32
-		{3C7CC5B6-9D6F-404B-9D91-BF5DB86F432D}.Release|Win32.Build.0 = Release|Win32
-		{3C7CC5B6-9D6F-404B-9D91-BF5DB86F432D}.Release|x64.ActiveCfg = Release|Win32
+		{1C1C17F0-A139-4CF5-92F7-92C03F238AEA}.Debug|Win32.ActiveCfg = Debug|Win32
+		{1C1C17F0-A139-4CF5-92F7-92C03F238AEA}.Debug|Win32.Build.0 = Debug|Win32
+		{1C1C17F0-A139-4CF5-92F7-92C03F238AEA}.Debug|x64.ActiveCfg = Debug|x64
+		{1C1C17F0-A139-4CF5-92F7-92C03F238AEA}.Debug|x64.Build.0 = Debug|x64
+		{1C1C17F0-A139-4CF5-92F7-92C03F238AEA}.Release|Win32.ActiveCfg = Release|Win32
+		{1C1C17F0-A139-4CF5-92F7-92C03F238AEA}.Release|Win32.Build.0 = Release|Win32
+		{1C1C17F0-A139-4CF5-92F7-92C03F238AEA}.Release|x64.ActiveCfg = Release|x64
+		{1C1C17F0-A139-4CF5-92F7-92C03F238AEA}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

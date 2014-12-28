@@ -94,6 +94,9 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
     unsigned dist;              /* match distance */
     unsigned char FAR *from;    /* where to copy match from */
 
+    unsigned char* next_in_start = strm->next_in;
+    unsigned char* next_out_start = strm->next_out;
+
     /* copy state to local variables */
     state = (struct inflate_state FAR *)strm->state;
     in = strm->next_in - OFF;
@@ -125,7 +128,8 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
             bits += 8;
         }
         here = lcode[hold & lmask];
-      dolen:
+    dolen:
+        Tracevv((stderr, "dolen: out=%d\n", out - beg));
         op = (unsigned)(here.bits);
         hold >>= op;
         bits -= op;
@@ -184,7 +188,9 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
                 bits -= op;
                 Tracevv((stderr, "inflate: F       distance %u\n", dist));
                 op = (unsigned)(out - beg);     /* max distance in output */
+                Tracevv((stderr, "maxout = %d\n", out - beg));
                 if (dist > op) {                /* see if copy from window */
+                    Tracevv((stderr, "dist > maxout\n"));
                     op = dist - op;             /* distance back in window */
                     if (op > whave) {
                         if (state->sane) {
@@ -215,6 +221,7 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
                     }
                     from = window - OFF;
                     if (wnext == 0) {           /* very common case */
+                        Tracevv((stderr, "wnext=0"));
                         from += wsize - op;
                         if (op < len) {         /* some from window */
                             len -= op;
@@ -225,9 +232,11 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
                         }
                     }
                     else if (wnext < op) {      /* wrap around window */
+                        Tracevv((stderr, "wrap around window, wnext=%d, maxout=%d, advancing from by %d\n", wnext, op, wsize + wnext - op));
                         from += wsize + wnext - op;
                         op -= wnext;
                         if (op < len) {         /* some from end of window */
+                            Tracevv((stderr, "some from end of window\n"));
                             len -= op;
                             do {
                                 PUP(out) = PUP(from);
@@ -266,6 +275,7 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
                     }
                 }
                 else {
+                    Tracevv((stderr, "all data is in output buffer\n"));
                     from = out - dist;          /* copy direct from output */
                     do {                        /* minimum length is three */
                         PUP(out) = PUP(from);
@@ -329,6 +339,9 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
                                  257 + (end - out) : 257 - (out - end));
     state->hold = hold;
     state->bits = bits;
+    int in_advance = strm->next_in - next_in_start;
+    int out_advance = strm->next_out - next_out_start;
+    Tracevv((stderr, "strm.avail_out = %d, in_advance = %d, out_advance = %d\n", strm->avail_out, in_advance, out_advance));
     return;
 }
 

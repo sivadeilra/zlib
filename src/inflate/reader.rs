@@ -5,6 +5,7 @@ use ZStream;
 use WINDOW_BITS_DEFAULT;
 use std::cmp::max;
 
+/// Provides an implementation of `Reader` for inflating (decompression) INFLATE / GZIP streams.
 pub struct InflateReader
 {
     src: Box<Reader + 'static>,

@@ -7,6 +7,8 @@ use std::io;
 use zlib::{WINDOW_BITS_DEFAULT,ZStream};
 use zlib::inflate::{InflateState,InflateResult};
 use zlib::inflate::InflateReader;
+use std::io::IoErrorKind;
+use std::io::IoError;
 
 /*
 fn main()
@@ -67,7 +69,7 @@ fn main()
 fn main()
 {
     let in_bufsize: uint = 0x1000;
-    let out_bufsize: uint = 512;
+    let out_bufsize: uint = 0x1000;
 
     let input_path = Path::new("tests/hamlet.tar.gz");
     let check_path = Path::new("tests/hamlet.tar");			// contains the expected (good) output
@@ -90,27 +92,41 @@ fn main()
     let mut strm = ZStream::new();
     let mut state = InflateState::new(WINDOW_BITS_DEFAULT, 2);
     let mut input_eof = false;
-    let mut loop_count: uint = 0;
+    let mut cycle: uint = 0;
 
     // Main loop
     loop {
+        println!("cycle = {}", cycle);
         // println!("decode loop: avail_in = {}, next_in = {}, avail_out = {}, next_out = {}",
         //     strm.avail_in, strm.next_in, strm.avail_out, strm.next_out);
 
         if input_pos == input_buffer.len() && !input_eof {
             // println!("input buffer is empty; loading data");
             input_buffer.clear();
-            let bytes_read = input_file.push(in_bufsize, &mut input_buffer).unwrap();
-            assert!(bytes_read > 0);
             input_pos = 0;
-            println!("zlibtest: loaded {} input bytes", bytes_read);
+            match input_file.push(in_bufsize, &mut input_buffer) {
+                Ok(bytes_read) => {
+                    println!("zlibtest: loaded {} input bytes", bytes_read);
+                }
+                Err(err) => {
+                    if err.kind == IoErrorKind::EndOfFile {
+                        println!("input stream EOF");
+                        input_eof = true;
+                    }
+                    else {
+                        println!("unexpected input error: {}", err.desc);
+                        break;
+                    }
+                }
+            };
         }
 
         let total_out: u64 = strm.total_out;
 
+        println!("calling inflate, cycle = {}, input_pos = {}, input_buffer.len = {}", cycle, input_pos, input_buffer.len());
         match state.inflate(&mut strm, None, input_buffer.slice_from(input_pos), out_data) {
             InflateResult::Eof(_) => {
-                println!("Eof");
+                println!("zlib says Z_STREAM_END");
                 break;
             }
 
@@ -121,7 +137,10 @@ fn main()
 
             InflateResult::Decoded(input_bytes_read, output_bytes_written) => {
                 // println!("InflateDecoded: input_bytes_read: {} output_bytes_written: {}", input_bytes_read, output_bytes_written);                
-                println!("zlibtest: in_read={}, out_written={}", input_bytes_read, output_bytes_written);
+                // println!("zlibtest: in_read={}, out_written={}", input_bytes_read, output_bytes_written);
+                println!("zlibtest: cycle = {}, input_bytes_read = {}, output_bytes_written = {}", cycle, input_bytes_read, output_bytes_written);
+                println!("total_in = {}", strm.total_in);
+                print_block(out_data.slice(0, output_bytes_written));
 
                 assert!(input_bytes_read + input_pos <= input_buffer.len());
                 input_pos += input_bytes_read;
@@ -151,12 +170,6 @@ fn main()
 					    check_buffer.clear();
                     }
                 }
-
-                loop_count += 1;
-                if loop_count >= 4000 {
-                    println!("stopping");
-                    break;
-                }
             }
 
             InflateResult::NeedInput => {
@@ -165,5 +178,31 @@ fn main()
             }
         }
 
+        cycle += 1;
+    }
+}
+
+fn print_block(data: &[u8]) {
+    let mut s = String::new();
+
+    let width = 32;
+
+    static HEX: [char; 0x10] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' ];
+
+    println!("print_block: len={}", data.len());
+
+    for i in range(0, data.len()) {
+        let b = data[i];
+        s.push(' ');
+        s.push(HEX[(b >> 4) as uint]);
+        s.push(HEX[(b & 0xf) as uint]);
+        if ((i + 1) % width) == 0 {
+            println!("{}", s);
+            s.clear();
+        }
+    }
+
+    if (data.len() % width) != 0 {
+        println!("{}", s);
     }
 }

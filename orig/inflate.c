@@ -122,7 +122,7 @@ z_streamp strm;
     state->lencode = state->distcode = state->next = state->codes;
     state->sane = 1;
     state->back = -1;
-    Tracev((stderr, "inflate: reset\n"));
+    // Tracev((stderr, "inflate: reset\n"));
     return Z_OK;
 }
 
@@ -208,7 +208,7 @@ int stream_size;
     state = (struct inflate_state FAR *)
             ZALLOC(strm, 1, sizeof(struct inflate_state));
     if (state == Z_NULL) return Z_MEM_ERROR;
-    Tracev((stderr, "inflate: allocated\n"));
+    // Tracev((stderr, "inflate: allocated\n"));
     strm->state = (struct internal_state FAR *)state;
     state->window = Z_NULL;
     ret = inflateReset2(strm, windowBits);
@@ -398,7 +398,7 @@ unsigned copy;
 
     /* if window not in use yet, initialize */
     if (state->wsize == 0) {
-        Tracevv((stderr, "wsize=0, initializing window, wbits=%d\n", state->wbits));
+        // Tracevv((stderr, "wsize=0, initializing window, wbits=%d\n", state->wbits));
         state->wsize = 1U << state->wbits;
         state->wnext = 0;
         state->whave = 0;
@@ -1040,11 +1040,12 @@ int flush;
             state->mode = LEN;
         case LEN:
             Tracevv((stderr, "LEN: left=%d\n", left));
-            if (have >= 6 && left >= 258 && 0) { // rust port's inflate_fast is not correct yet
+            if (have >= 6 && left >= 258) { // rust port's inflate_fast is not correct yet
                 Tracevv((stderr, "LEN: fast path\n"));
                 RESTORE();
                 inflate_fast(strm, out);
                 LOAD();
+                Tracevv((stderr, "left=%d\n", left));
                 if (state->mode == TYPE)
                     state->back = -1;
                 break;
@@ -1274,6 +1275,9 @@ int flush;
             return Z_MEM_ERROR;
         }
     }
+
+    Tracevv((stderr, "avail_in=%d avail_out=%d\n", strm->avail_in, strm->avail_out));
+
     in -= strm->avail_in;
     out -= strm->avail_out;
 

@@ -131,15 +131,24 @@ pub fn inflate_fast(
     input_buffer: &[u8],
     output_buffer: &mut [u8],
     strm_next_in: &mut uint,
-    strm_avail_in: &mut uint,
     strm_next_out: &mut uint,
-    strm_avail_out: &mut uint,
     start: uint)                 /* inflate()'s starting value for strm.avail_out */
 {
+    assert!(input_buffer.len() >= 5);
+    assert!(output_buffer.len() >= 257);
+
+    let in_pos_start = *strm_next_in;
+    let out_pos_start = *strm_next_out;
+
     // copy state to local variables
-    let mut out = BufPosMut { buf: output_buffer, pos: *strm_next_out };
-    let beg :uint = out.pos - (start - *strm_avail_out);     // inflate()'s initial strm.next_out
-    let end :uint = out.pos + (*strm_avail_out - 257);       // while out < end, enough space available
+    let mut out = BufPosMut { buf: output_buffer, pos: out_pos_start };
+    let beg :uint = 0; // out.pos - (start - (out.buf.len() - *strm_next_out));     // inflate()'s initial strm.next_out
+    // beg = out - (start - strm->avail_out);
+    // beg = out_pos_start - (0 - (start - next_out));
+
+    let end :uint = out.buf.len() - 257; // out.pos + (*strm_avail_out - 257);       // while out < end, enough space available
+    assert!(*strm_next_out <= end);
+
 // #ifdef INFLATE_STRICT
     let dmax: uint = state.dmax;                    // maximum distance from zlib header
 // #endif
@@ -166,7 +175,7 @@ pub fn inflate_fast(
         hold: state.hold,
         bits: state.bits,
     };
-    let last: uint = input.pos + (*strm_avail_in - 5);     // (index into input_buffer) have enough input while in < last
+    let last: uint = input_buffer.len() - 5; // input.pos + (*strm_avail_in - 5);     // (index into input_buffer) have enough input while in < last
 
     // debug!("starting inflate_fast");
     // debug!("    total_in: {}, next_in: {}", strm.total_in, *strm_next_in);
@@ -210,6 +219,7 @@ pub fn inflate_fast(
 
             InflateFastState::DoLen => {
               //dolen:
+                debug!("dolen: out={}", out.pos);
                 input.drop_bits(here.bits as uint);
                 let op = here.op as uint;
                 if op == 0 {
@@ -259,7 +269,7 @@ pub fn inflate_fast(
                 else if (op & 32) != 0 {
                     // end-of-block
                     // debug!("inflate: end of block");
-                    Tracevv!("inflate:         end of block");
+                    debug!("inflate:         end of block");
                     state.mode = InflateMode::TYPE;
                     break;
                 }
@@ -316,7 +326,9 @@ pub fn inflate_fast(
                     // output buffer, rather than dealing with wrap-around in the window buffer.
                     let mut maxout = out.pos - beg;     /* max distance in output */
                     debug!("inflate: F       distance {}", dist);
+                    debug!("maxout = {}", maxout);
                     if dist > maxout {
+                        debug!("dist > maxout");
                         // The distance exceeds the data that is stored within the output buffer.
                         // We still may be able to copy some data from the output buffer, but we
                         // will need to copy at least some of it from the window.
@@ -382,7 +394,7 @@ pub fn inflate_fast(
                         let mut from = BufPos { buf: window, pos: 0 };
                         if wnext == 0 {
                             // very common case
-                            Tracevv!("wnext = 0");
+                            debug!("wnext=0");
                             debug!("(common) wnext = 0, wsize = {}, maxout = {}, len = {}", wsize, maxout, len);
                             if maxout < len {
                                 // some from window
@@ -410,7 +422,7 @@ pub fn inflate_fast(
                         else if wnext < maxout {
                             // wrap around window
                             // debug!("wrap around window");
-                            Tracevv!("wrap around window, wnext: {}, op: {}, advancing from by {}", wnext, maxout, wsize + wnext - maxout);
+                            debug!("wrap around window, wnext={}, maxout={}, advancing from by {}", wnext, maxout, wsize + wnext - maxout);
                             from.pos += wsize + wnext - maxout;
                             maxout -= wnext;
                             if maxout < len {
@@ -434,15 +446,19 @@ pub fn inflate_fast(
 
                                     /* rest from output */
                                     copy_within_output_buffer(out.buf, out.pos, out.pos - dist, len);
+                                    out.pos += len;
                                 }
                                 else {
                                     // copy from 'from' to output
                                     copy_memory(out.buf.slice_mut(out.pos, out.pos + len), window.slice(from.pos, from.pos + len));
+                                    out.pos += len;
                                 }
                             }
                             else {
                                 // copy from window ('from') to output
+                                // debug!("copy from window to output");
                                 copy_memory(out.buf.slice_mut(out.pos, out.pos + len), window.slice(from.pos, from.pos + len));
+                                out.pos += len;
                             }
                         }
                         else {
@@ -471,6 +487,7 @@ pub fn inflate_fast(
                         }
                     }
                     else {
+                        debug!("all data is in output buffer");
                         // All of the data that we need to copy can already be found in the output buffer.
                         // Now we just need to locate it and do the copy.
                         //      dist - distance back
@@ -544,10 +561,13 @@ pub fn inflate_fast(
     assert!(input.pos > *strm_next_in || out.pos > *strm_next_out);
 
     // update state and return
+    let in_advance = input.pos - in_pos_start; // number of bytes we have advanced on input
+    let out_advance = out.pos - out_pos_start; // number of bytes we have advanced on output
+
     *strm_next_in = input.pos;
     *strm_next_out = out.pos;
-    *strm_avail_in = if input.pos < last { 5 + (last - input.pos) } else { 5 - (input.pos - last) };
-    *strm_avail_out = if out.pos < end { 257 + (end - out.pos) } else { 257 - (out.pos - end) };
+    // *strm_avail_in = if input.pos < last { 5 + (last - input.pos) } else { 5 - (input.pos - last) };
+    // *strm_avail_out = if out.pos < end { 257 + (end - out.pos) } else { 257 - (out.pos - end) };
     state.hold = input.hold;
     state.bits = input.bits;
 
@@ -558,6 +578,7 @@ pub fn inflate_fast(
     //     *strm_avail_out);
     // 
     // Tracevv!("done.  avail_in: {}, avail_out: {}", strm.avail_in, strm.avail_out);
+    debug!("strm.avail_out = {}, in_advance = {}, out_advance = {}", out.buf.len() - *strm_next_out, in_advance, out_advance);
 }
 
 /*
