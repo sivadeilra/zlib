@@ -10,7 +10,7 @@ use crc32::crc32;
 use adler32::adler32;
 use self::inffast::inflate_fast;
 use self::inffast::BufPos;
-use self::inftrees::inflate_table;
+use self::inftrees::{Code, ENOUGH, CODES, LENS, DISTS, inflate_table};
 use std::default::Default;
 use GZipHeader;
 use ZStream;
@@ -28,6 +28,7 @@ const DEFAULT_DMAX: uint = 32768;
 mod inffast;
 mod inftrees;
 mod reader;
+mod inffixed;
 
 macro_rules! BADINPUT {
     ($loc:expr, $msg:expr) => {
@@ -68,61 +69,6 @@ macro_rules! NEEDBITS {
         }
     }
 }
-
-// Structure for decoding tables.  Each entry provides either the
-// information needed to do the operation requested by the code that
-// indexed that table entry, or it provides a pointer to another
-// table that indexes more bits of the code.  op indicates whether
-// the entry is a pointer to another table, a literal, a length or
-// distance, an end-of-block, or an invalid code.  For a table
-// pointer, the low four bits of op is the number of index bits of
-// that table.  For a length or distance, the low four bits of op
-// is the number of extra bits to get after the code.  bits is
-// the number of bits in this code or part of the code to drop off
-// of the bit buffer.  val is the actual byte to output in the case
-// of a literal, the base length or distance, or the offset from
-// the current table to the next table.  Each entry is four bytes.
-#[deriving(Copy,Default)]
-struct Code
-{
-    // operation, extra bits, table bits
-    // op values as set by inflate_table():
-    // 00000000 - literal
-    // 0000tttt - table link, tttt != 0 is the number of table index bits
-    // 0001eeee - length or distance, eeee is the number of extra bits
-    // 01100000 - end of block
-    // 01000000 - invalid code
-    op: u8,
-
-    /// bits in this part of the code
-    bits: u8,
-
-    /// offset in table or code value
-    val: u16,
-}
-
-// Maximum size of the dynamic table.  The maximum number of code structures is
-// 1444, which is the sum of 852 for literal/length codes and 592 for distance
-// codes.  These values were found by exhaustive searches using the program
-// examples/enough.c found in the zlib distribtution.  The arguments to that
-// program are the number of symbols, the initial root table size, and the
-// maximum bit length of a code.  "enough 286 9 15" for literal/length codes
-// returns returns 852, and "enough 30 6 15" for distance codes returns 592.
-// The initial root table size (9 or 6) is found in the fifth argument of the
-// inflate_table() calls in inflate.c and infback.c.  If the root table size is
-// changed, then these maximum sizes would be need to be recalculated and
-// updated.
-const ENOUGH_LENS :uint = 852;
-const ENOUGH_DISTS :uint = 592;
-const ENOUGH :uint = ENOUGH_LENS + ENOUGH_DISTS;
-
-/* Type of code to build for inflate_table() */
-// enum codetype {
-type CodeType = u8;
-    pub const CODES: u8 = 0;
-    pub const LENS: u8 = 1;
-    pub const DISTS: u8 = 2;
-// }
 
 /// Describes the results of calling `inflate()`.
 #[deriving(Copy)]
@@ -354,7 +300,7 @@ impl InflateState
 
         self.sane = true;
         self.back = -1;
-        debug!("inflate: reset");
+        // debug!("inflate: reset");
     }
 
     pub fn reset(&mut self, strm: &mut ZStream)
@@ -857,7 +803,7 @@ impl InflateState
                                 debug!("inflate:     fixed codes block (last)");
                             }
                             else {
-                                debug!("inflate:      fixed codes block");
+                                debug!("inflate:     fixed codes block");
                             }
                             loc.state.mode = InflateMode::LEN_; // decode codes
                             if flush == Flush::Trees {
@@ -881,6 +827,7 @@ impl InflateState
                         _ => { unreachable!(); }
                     }
                     dropbits(loc, 2);
+                    debug!("hold={:08x} bits={}", loc.hold, loc.bits);
                 }
             }
 
@@ -888,11 +835,11 @@ impl InflateState
                 bytebits(loc);                         /* go to byte boundary */
                 NEEDBITS!(loc, 32);
                 let len = loc.hold & 0xffff;
-                let invlen = loc.hold >> 16;
+                let invlen = (loc.hold >> 16) ^ 0xffff;
                 if len != invlen {
                     BADINPUT!(loc, "invalid stored block lengths");
                 }
-                debug!("STORED: len = {}", len);
+                debug!("inflate:       stored length {}", len);
                 loc.state.length = len as uint;
                 initbits(loc);
                 loc.state.mode = InflateMode::COPY_;
@@ -908,11 +855,11 @@ impl InflateState
             InflateMode::COPY => {
                 copy = loc.state.length;
                 if copy != 0 {
-                    debug!("copy length = {}", copy);
+                    // debug!("copy length = {}", copy);
                     if copy > loc.have() { copy = loc.have(); }
                     if copy > loc.left() { copy = loc.left(); }
                     if copy == 0 {
-                        debug!("cannot copy data right now (no buffer space) -- exiting");
+                        // debug!("cannot copy data right now (no buffer space) -- exiting");
                         return inf_leave(loc);
                     }
                     copy_memory(loc.output_buffer.slice_mut(loc.put, copy), loc.input_buffer.slice(loc.next, loc.next + copy));
@@ -922,7 +869,7 @@ impl InflateState
                     // stay in state COPY
                 }
                 else {
-                    debug!("inflate: stored end");
+                    debug!("inflate:       stored end");
                     loc.state.mode = InflateMode::TYPE;
                 }
             }
@@ -1060,7 +1007,7 @@ impl InflateState
                 goto_mode!(loc, LEN);
             }
             InflateMode::LEN => {
-                debug!("LEN: left={}", loc.left()); // fast path isn't correct yet
+                debug!("LEN: left={}", loc.left());
                 if loc.have() >= 6 && loc.left() >= 258 {
                     debug!("LEN: fast path");
                     restore_locals(loc);
@@ -1342,7 +1289,7 @@ impl InflateState
                 debug!("BAD state -- input data is invalid");
                 match loc.strm.msg {
                     Some(ref errmsg) => {
-                        debug!("message: {}", errmsg);
+                        panic!("InflateMode::BAD: total_in = {}, message: {}", loc.strm.total_in, errmsg);
                     }
                     _ => {}
                 }
@@ -1376,7 +1323,7 @@ impl InflateState
     // may not be thread-safe.
     fn fixedtables(&mut self, strm: &mut ZStream)
     {
-        debug!("fixedtables");
+        // debug!("fixedtables");
 
         let mut fixed: [Code, ..544] = [Default::default(), ..544];
 
@@ -1409,6 +1356,10 @@ impl InflateState
     // #else /* !BUILDFIXED */
     // #   include "inffixed.h"
     // #endif /* BUILDFIXED */
+        // ::std::slice::bytes::copy_memory(self.codes.as_mut_slice(), fixed.as_slice());
+        for i in range(0, 544) {
+            self.codes[i] = fixed[i];
+        }
         self.lencode = lenfix;
         self.lenbits = 9;
         self.distcode = distfix;

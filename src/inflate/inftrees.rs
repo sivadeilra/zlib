@@ -1,5 +1,5 @@
 use std::iter::range_inclusive;
-use super::{Code,CodeType,CODES,LENS,ENOUGH_LENS,DISTS,ENOUGH_DISTS};
+// use super::{Code,CodeType,CODES,LENS,ENOUGH_LENS,DISTS,ENOUGH_DISTS};
 
 /* inftrees.h -- header to use inftrees.c
  * Copyright (C) 1995-2005, 2010 Mark Adler
@@ -10,6 +10,60 @@ use super::{Code,CodeType,CODES,LENS,ENOUGH_LENS,DISTS,ENOUGH_DISTS};
    part of the implementation of the compression library and is
    subject to change. Applications should only use zlib.h.
  */
+
+// Structure for decoding tables.  Each entry provides either the
+// information needed to do the operation requested by the code that
+// indexed that table entry, or it provides a pointer to another
+// table that indexes more bits of the code.  op indicates whether
+// the entry is a pointer to another table, a literal, a length or
+// distance, an end-of-block, or an invalid code.  For a table
+// pointer, the low four bits of op is the number of index bits of
+// that table.  For a length or distance, the low four bits of op
+// is the number of extra bits to get after the code.  bits is
+// the number of bits in this code or part of the code to drop off
+// of the bit buffer.  val is the actual byte to output in the case
+// of a literal, the base length or distance, or the offset from
+// the current table to the next table.  Each entry is four bytes.
+#[deriving(Copy,Default)]
+pub struct Code {
+    // operation, extra bits, table bits
+    // op values as set by inflate_table():
+    // 00000000 - literal
+    // 0000tttt - table link, tttt != 0 is the number of table index bits
+    // 0001eeee - length or distance, eeee is the number of extra bits
+    // 01100000 - end of block
+    // 01000000 - invalid code
+    pub op: u8,
+
+    /// bits in this part of the code
+    pub bits: u8,
+
+    /// offset in table or code value
+    pub val: u16,
+}
+
+// Maximum size of the dynamic table.  The maximum number of code structures is
+// 1444, which is the sum of 852 for literal/length codes and 592 for distance
+// codes.  These values were found by exhaustive searches using the program
+// examples/enough.c found in the zlib distribtution.  The arguments to that
+// program are the number of symbols, the initial root table size, and the
+// maximum bit length of a code.  "enough 286 9 15" for literal/length codes
+// returns returns 852, and "enough 30 6 15" for distance codes returns 592.
+// The initial root table size (9 or 6) is found in the fifth argument of the
+// inflate_table() calls in inflate.c and infback.c.  If the root table size is
+// changed, then these maximum sizes would be need to be recalculated and
+// updated.
+pub const ENOUGH_LENS :uint = 852;
+pub const ENOUGH_DISTS :uint = 592;
+pub const ENOUGH :uint = ENOUGH_LENS + ENOUGH_DISTS;
+
+/* Type of code to build for inflate_table() */
+// enum codetype {
+pub type CodeType = u8;
+    pub const CODES: u8 = 0;
+    pub const LENS: u8 = 1;
+    pub const DISTS: u8 = 2;
+// }
 
 // inftrees.c -- generate Huffman trees for efficient decoding
 // Copyright (C) 1995-2013 Mark Adler

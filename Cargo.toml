@@ -4,5 +4,7 @@ name = "zlib"
 version = "0.0.1"
 authors = ["Arlie Davis <arlie.davis@gmail.com>"]
 
+build = "build.rs"
+
 [dependencies.crc32]
 git = "https://github.com/sivadeilra/crc32.git"

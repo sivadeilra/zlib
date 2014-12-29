@@ -880,6 +880,7 @@ int flush;
                 state->mode = BAD;
             }
             DROPBITS(2);
+            Tracevv((stderr, "hold=%08x bits=%d\n", hold, bits));
             break;
         case STORED:
             BYTEBITS();                         /* go to byte boundary */

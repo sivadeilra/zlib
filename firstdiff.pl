@@ -14,7 +14,7 @@ push(@history, "foo");
 push(@history, "bar");
 print "history=@history\n";
 
-$NHISTORY = 20;
+$NHISTORY = 1000;
 
 while (true) {    
 
@@ -43,7 +43,8 @@ while (true) {
             print "same   : $x\n";
         }
 
-        print "Divergent blocks:\n\n";
+        # print "Divergent blocks:\n\n";
+        print "\n";
 
         print "$filename_a:\n";
         print "A      : $a\n";

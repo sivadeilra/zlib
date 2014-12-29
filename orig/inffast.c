@@ -129,7 +129,7 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
         }
         here = lcode[hold & lmask];
     dolen:
-        Tracevv((stderr, "dolen: out=%d\n", out - beg));
+        Tracevv((stderr, "dolen: out=%d hold=%08x bits=%d here.bits=%d here.op=%08x\n", out - beg, hold, bits, here.bits, here.op));
         op = (unsigned)(here.bits);
         hold >>= op;
         bits -= op;
@@ -243,6 +243,7 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
                             } while (--op);
                             from = window - OFF;
                             if (wnext < len) {  /* some from start of window */
+                                Tracevv((stderr, "some from start of window\n"));
                                 op = wnext;
                                 len -= op;
                                 do {
@@ -305,7 +306,7 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
             goto dolen;
         }
         else if (op & 32) {                     /* end-of-block */
-            Tracevv((stderr, "inflate:         end of block\n"));
+            Tracevv((stderr, "inflate: F       end of block\n"));
             state->mode = TYPE;
             break;
         }
@@ -339,9 +340,7 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
                                  257 + (end - out) : 257 - (out - end));
     state->hold = hold;
     state->bits = bits;
-    int in_advance = strm->next_in - next_in_start;
-    int out_advance = strm->next_out - next_out_start;
-    Tracevv((stderr, "strm.avail_out = %d, in_advance = %d, out_advance = %d\n", strm->avail_out, in_advance, out_advance));
+    Tracevv((stderr, "strm.avail_out = %d, in_advance = %d, out_advance = %d\n", strm->avail_out, (int)(strm->next_in - next_in_start), (int)(strm->next_out - next_out_start)));
     return;
 }
 

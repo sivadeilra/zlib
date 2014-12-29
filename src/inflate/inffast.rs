@@ -4,7 +4,7 @@
  */
 
 use ZStream;
-use super::Code;
+use super::inftrees::Code;
 use super::InflateState;
 use super::InflateMode;
 use std::slice::bytes::copy_memory;
@@ -158,7 +158,7 @@ pub fn inflate_fast(
     let wnext: uint = state.wnext;                  // window write index
     let window = state.window.as_slice();           // allocated sliding window, if wsize != 0
 
-    let codes = &mut state.codes;                   // local strm.codes
+    let codes = &state.codes;                       // local strm.codes
     let lcode: uint = state.lencode;                // local strm.lencode; is index into 'codes'
     let dcode: uint = state.distcode;               // local strm.distcode; is index into 'codes'
     let lmask: u32 = (1 << state.lenbits) - 1;      // mask for first level of length codes
@@ -219,9 +219,9 @@ pub fn inflate_fast(
 
             InflateFastState::DoLen => {
               //dolen:
-                debug!("dolen: out={}", out.pos);
-                input.drop_bits(here.bits as uint);
+                debug!("dolen: out={} hold={:08x} bits={} here.bits={} here.op={:08x}", out.pos, input.hold, input.bits, here.bits, here.op);
                 let op = here.op as uint;
+                input.drop_bits(here.bits as uint);
                 if op == 0 {
                     // literal
                     // debug!("(dolen): consumed {:2} bits, {:2} bits left, output literal byte: 0x{:2x}", here.bits, input.bits, here.val);
@@ -269,7 +269,7 @@ pub fn inflate_fast(
                 else if (op & 32) != 0 {
                     // end-of-block
                     // debug!("inflate: end of block");
-                    debug!("inflate:         end of block");
+                    debug!("inflate: F       end of block");
                     state.mode = InflateMode::TYPE;
                     break;
                 }
@@ -524,6 +524,7 @@ pub fn inflate_fast(
                 else {
                     strm.msg = Some("invalid distance code".to_string());
                     state.mode = InflateMode::BAD;
+                    panic!("invalid distance code");
                     break;
                 }
                 InflateFastState::Start
@@ -557,8 +558,9 @@ pub fn inflate_fast(
     input.hold &= (1 << input.bits) - 1;
 
     // we expect to have advanced state
+    // actually, it is possible not to have advanced these pointers, if we consume only bits, not entire bytes
     // debug!("    input.pos = {}, strm.next_in = {}", input.pos, *strm_next_in);
-    assert!(input.pos > *strm_next_in || out.pos > *strm_next_out);
+    // assert!(input.pos > *strm_next_in || out.pos > *strm_next_out);
 
     // update state and return
     let in_advance = input.pos - in_pos_start; // number of bytes we have advanced on input
