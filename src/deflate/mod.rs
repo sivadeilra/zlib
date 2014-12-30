@@ -32,37 +32,37 @@ const HEAP_SIZE: uint = 2 * L_CODES + 1;
 const BUF_SIZE: uint = 16;
 
 /* Stream status */
-const INIT_STATE   : uint = 42;
-const EXTRA_STATE  : uint = 69;
-const NAME_STATE   : uint = 73;
+const INIT_STATE: uint = 42;
+const EXTRA_STATE: uint = 69;
+const NAME_STATE: uint = 73;
 const COMMENT_STATE: uint = 91;
-const HCRC_STATE   : uint = 103;
-const BUSY_STATE   : uint = 113;
-const FINISH_STATE : uint = 666;
+const HCRC_STATE: uint = 103;
+const BUSY_STATE: uint = 113;
+const FINISH_STATE: uint = 666;
 
-/* A Pos is an index in the character window. We use short instead of int to
- * save space in the various tables. IPos is used only for parameter passing.
- */
+// A Pos is an index in the character window. We use short instead of int to
+// save space in the various tables. IPos is used only for parameter passing.
 type Pos = u16;
 type Posf = u16;    // replace with Pos
 type IPos = u32;
 
-struct InternalState {
-    status :uint,        /* as the name implies */
-    pending_buf :Vec<u8>,  /* output still pending */
-    pending_buf_size: uint, /* size of pending_buf */    // use pending_buf.len()
-    // u8 *pending_out,  /* next pending byte to output to the stream */
-    pending: uint,                  // nb of bytes in the pending buffer
+// was "internal_state" / "deflate_state"
+struct DeflateState {
+    status: uint,                   // as the name implies
+    pending_buf: Vec<u8>,           // output still pending
+    pending_buf_size: uint,         // size of pending_buf // use pending_buf.len()
+    pending_out: uint,              // next pending byte to output to the stream (is index into what, pending_buf?)
+    pending: uint,                  // number of bytes in the pending buffer
     wrap: uint,                     // bit 0 true for zlib, bit 1 true for gzip
     gzhead: Option<GZipHeader>,     // gzip header information to write
     gzindex: uint,                  // where in extra, name, or comment
     method: u8,                     // can only be DEFLATED
-    last_flush :int,                // value of flush param for previous deflate call
+    last_flush: int,                // value of flush param for previous deflate call
 
-    /* used by deflate.c: */
-    w_size :uint,        /* LZ77 window size (32K by default) */
-    w_bits :uint,        /* log2(w_size)  (8..16) */
-    w_mask :uint,        /* w_size - 1 */
+    // used by deflate.c:
+    w_size: uint,        // LZ77 window size (32K by default)
+    w_bits: uint,        // log2(w_size)  (8..16)
+    w_mask: uint,        // w_size - 1
 
     // Sliding window. Input bytes are read into the second half of the window,
     // and move to the first half later to keep a dictionary of at least wSize
@@ -71,53 +71,53 @@ struct InternalState {
     // performed with a length multiple of the block size. Also, it limits
     // the window size to 64K, which is quite useful on MSDOS.
     // To do: use the user input buffer as sliding window.
-    window :Vec<u8>,
+    window: Vec<u8>,
 
     // Actual size of window: 2*wSize, except when the user input buffer
     // is directly used as sliding window.
-    window_size :uint,
+    window_size: uint,
 
     // Link to older string with same hash index. To limit the size of this
     // array to 64K, this link is maintained only for the last 32K strings.
     // An index in this array is thus a window index modulo 32K.
     prev: Vec<Pos>,
 
-    head: Vec<Pos>, // Heads of the hash chains or NIL.
+    head: Vec<Pos>,       // Heads of the hash chains or NIL.
 
-    ins_h :uint,          // hash index of string to be inserted
-    hash_size :uint,      // number of elements in hash table
-    hash_bits :uint,      // log2(hash_size)
-    hash_mask :uint,      // hash_size-1
+    ins_h: uint,          // hash index of string to be inserted
+    hash_size: uint,      // number of elements in hash table
+    hash_bits: uint,      // log2(hash_size)
+    hash_mask: uint,      // hash_size-1
 
     // Number of bits by which ins_h must be shifted at each input
     // step. It must be such that after MIN_MATCH steps, the oldest
     // byte no longer takes part in the hash key, that is:
     //   hash_shift * MIN_MATCH >= hash_bits
-    hash_shift :uint,
+    hash_shift: uint,
 
     // Window position at the beginning of the current output block. Gets
     // negative when the window is moved backwards.
-    block_start :int,
+    block_start: int,
 
-    match_length :uint,           /* length of best match */
-    prev_match: IPos,             /* previous match */
-    match_available: int,         /* set if previous match exists */
-    strstart :uint,               /* start of string to insert */
-    match_start :uint,            /* start of matching string */
-    lookahead :uint,              /* number of valid bytes ahead in window */
+    match_length: uint,           // length of best match
+    prev_match: IPos,             // previous match
+    match_available: int,         // set if previous match exists
+    strstart: uint,               // start of string to insert
+    match_start: uint,            // start of matching string
+    lookahead: uint,              // number of valid bytes ahead in window
 
     // Length of the best match at previous step. Matches not greater than this
     // are discarded. This is used in the lazy match evaluation.
-    prev_length :uint,
+    prev_length: uint,
 
     // To speed up deflation, hash chains are never searched beyond this
     // length.  A higher limit improves compression ratio but degrades the speed.
-    max_chain_length :uint,
+    max_chain_length: uint,
 
     // Attempt to find a better match only when the current match is strictly
     // smaller than this value. This mechanism is used only for compression
     // levels >= 4.
-    max_lazy_match :uint,
+    max_lazy_match: uint,
 
 // #   define max_insert_length  max_lazy_match
     /* Insert new strings in the hash table only if the match length is not
@@ -135,62 +135,59 @@ struct InternalState {
 
                 /* used by trees.c: */
     /* Didn't use ct_data typedef below to suppress compiler warning */
-    dyn_ltree_fc :[u16, ..HEAP_SIZE],   /* literal and length tree */
-    dyn_ltree_dl :[u16, ..HEAP_SIZE],
+    dyn_ltree_fc: [u16, ..HEAP_SIZE],   /* literal and length tree */
+    dyn_ltree_dl: [u16, ..HEAP_SIZE],
 
-    dyn_dtree_fc :[u16, ..2*D_CODES+1], /* distance tree */
-    dyn_dtree_dl :[u16, ..2*D_CODES+1], /* distance tree */
+    dyn_dtree_fc: [u16, ..2*D_CODES+1], /* distance tree */
+    dyn_dtree_dl: [u16, ..2*D_CODES+1], /* distance tree */
 
-    bl_tree_fc :[u16, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
-    bl_tree_dl :[u16, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
+    bl_tree_fc: [u16, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
+    bl_tree_dl: [u16, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
 
-    l_desc :TreeDesc,               /* desc. for literal tree */
-    d_desc :TreeDesc,               /* desc. for distance tree */
-    bl_desc :TreeDesc,              /* desc. for bit length tree */
+    l_desc: TreeDesc,               /* desc. for literal tree */
+    d_desc: TreeDesc,               /* desc. for distance tree */
+    bl_desc: TreeDesc,              /* desc. for bit length tree */
 
-    bl_count :[u16, ..MAX_BITS+1],
+    bl_count: [u16, ..MAX_BITS+1],
     /* number of codes at each bit length for an optimal tree */
 
-    heap :[int, ..2*L_CODES+1],      /* heap used to build the Huffman trees */
+    heap: [int, ..2*L_CODES+1],      /* heap used to build the Huffman trees */
     heap_len: uint,               /* number of elements in the heap */
     heap_max: uint,               /* element of largest frequency */
-    /* The sons of heap[n] are heap[2*n] and heap[2*n+1]. heap[0] is not used.
-     * The same heap array is used to build all trees.
-     */
+    // The sons of heap[n] are heap[2*n] and heap[2*n+1]. heap[0] is not used.
+    // The same heap array is used to build all trees.
 
+    /// Depth of each subtree used as tie breaker for trees of equal frequency
     depth: [u8, ..2*L_CODES+1],
-    /* Depth of each subtree used as tie breaker for trees of equal frequency
-     */
 
-    l_buf :Vec<u8>,          /* buffer for literals or lengths */
+    l_buf: Vec<u8>,          /* buffer for literals or lengths */
 
-    lit_bufsize :uint,
-    /* Size of match buffer for literals/lengths.  There are 4 reasons for
-     * limiting lit_bufsize to 64K:
-     *   - frequencies can be kept in 16 bit counters
-     *   - if compression is not successful for the first block, all input
-     *     data is still in the window so we can still emit a stored block even
-     *     when input comes from standard input.  (This can also be done for
-     *     all blocks if lit_bufsize is not greater than 32K.)
-     *   - if compression is not successful for a file smaller than 64K, we can
-     *     even emit a stored file instead of a stored block (saving 5 bytes).
-     *     This is applicable only for zip (not gzip or zlib).
-     *   - creating new Huffman trees less frequently may not provide fast
-     *     adaptation to changes in the input data statistics. (Take for
-     *     example a binary file with poorly compressible code followed by
-     *     a highly compressible string table.) Smaller buffer sizes give
-     *     fast adaptation but have of course the overhead of transmitting
-     *     trees more frequently.
-     *   - I can't count above 4
-     */
+    // Size of match buffer for literals/lengths.  There are 4 reasons for
+    // limiting lit_bufsize to 64K:
+    //   - frequencies can be kept in 16 bit counters
+    //   - if compression is not successful for the first block, all input
+    //     data is still in the window so we can still emit a stored block even
+    //     when input comes from standard input.  (This can also be done for
+    //     all blocks if lit_bufsize is not greater than 32K.)
+    //   - if compression is not successful for a file smaller than 64K, we can
+    //     even emit a stored file instead of a stored block (saving 5 bytes).
+    //     This is applicable only for zip (not gzip or zlib).
+    //   - creating new Huffman trees less frequently may not provide fast
+    //     adaptation to changes in the input data statistics. (Take for
+    //     example a binary file with poorly compressible code followed by
+    //     a highly compressible string table.) Smaller buffer sizes give
+    //     fast adaptation but have of course the overhead of transmitting
+    //     trees more frequently.
+    //   - I can't count above 4
+    lit_bufsize: uint,
 
-    last_lit: uint,      /* running index in l_buf */
+    // running index in l_buf
+    last_lit: uint,      
 
+    /// Buffer for distances. To simplify the code, d_buf and l_buf have
+    /// the same number of elements. To use different lengths, an extra flag
+    /// array would be necessary.
     d_buf: Vec<u16>,
-    /* Buffer for distances. To simplify the code, d_buf and l_buf have
-     * the same number of elements. To use different lengths, an extra flag
-     * array would be necessary.
-     */
 
     opt_len: uint,        /* bit length of current block with optimal trees */
     static_len: uint,     /* bit length of current block with static trees */
@@ -219,12 +216,10 @@ struct InternalState {
      */
 }
 
-pub type DeflateState = InternalState;
-
 /* Output a byte on the stream.
  * IN assertion: there is enough room in pending_buf.
  */
-pub fn put_byte(s :&mut DeflateState, c: u8)
+pub fn put_byte(s: &mut DeflateState, c: u8)
 {
     s.pending_buf[s.pending] = c;
     s.pending += 1;
@@ -234,23 +229,22 @@ pub fn put_byte(s :&mut DeflateState, c: u8)
 
 /// Minimum amount of lookahead, except at the end of the input file.
 /// See deflate.c for comments about the MIN_MATCH+1.
-pub const MIN_LOOKAHEAD :uint = (MAX_MATCH+MIN_MATCH+1);
+pub const MIN_LOOKAHEAD: uint = (MAX_MATCH+MIN_MATCH+1);
 
 // was MAX_DIST
-pub fn max_dist(s :&mut DeflateState) -> uint
+pub fn max_dist(s: &mut DeflateState) -> uint
 {
     s.w_size - MIN_LOOKAHEAD
 }
 
-/* In order to simplify the code, particularly on 16 bit machines, match
- * distances are limited to MAX_DIST instead of WSIZE.
- */
+// In order to simplify the code, particularly on 16 bit machines, match
+// distances are limited to MAX_DIST instead of WSIZE.
 
 /// Number of bytes after end of data in window to initialize in order to avoid
 /// memory checker errors from longest match routines */
-pub const WIN_INIT :uint = MAX_MATCH;
+pub const WIN_INIT: uint = MAX_MATCH;
 
-pub fn d_code(dist :u16) -> u16
+pub fn d_code(dist: u16) -> u16
 {
     if dist < 256 {
         DIST_CODE[dist as uint] as u16
@@ -261,14 +255,13 @@ pub fn d_code(dist :u16) -> u16
 }
 
 /*
-static _length_code :[u8, ..];
-static _dist_code :[u8, ..];
+static _length_code: [u8, ..];
+static _dist_code: [u8, ..];
 */
 
-pub fn _tr_tally_lit(s :&mut DeflateState, c :u8)
-    -> bool     // returns 'flush' value
-{
-    let cc :u8 = c;
+// returns 'flush' value
+pub fn _tr_tally_lit(s: &mut DeflateState, c: u8) -> bool {
+    let cc: u8 = c;
     s.d_buf[s.last_lit] = 0;
     s.l_buf[s.last_lit] = cc;
     s.last_lit += 1;
@@ -276,9 +269,8 @@ pub fn _tr_tally_lit(s :&mut DeflateState, c :u8)
     s.last_lit == s.lit_bufsize - 1
 }
 
-pub fn _tr_tally_dist(s :&mut DeflateState, distance :u16, length :u8)
-    -> bool     // returns 'flush' value
-{
+// returns 'flush' value
+pub fn _tr_tally_dist(s: &mut DeflateState, distance: u16, length: u8) -> bool {
     let len = length;
     let mut dist = distance;
     s.d_buf[s.last_lit as uint] = dist;
@@ -290,15 +282,14 @@ pub fn _tr_tally_dist(s :&mut DeflateState, distance :u16, length :u8)
     s.last_lit == s.lit_bufsize - 1
 }
 
-impl InternalState
-{
-    fn new() -> InternalState
-    {
-        let mut s = InternalState {
+impl DeflateState {
+    fn new() -> DeflateState {
+        let mut s = DeflateState {
             status: 0,
             pending_buf: Vec::new(),
             pending_buf_size: 0,
             pending: 0,
+            pending_out: 0,
             wrap: 0,
             gzhead: None,
             gzindex: 0,
@@ -331,12 +322,12 @@ impl InternalState
             strategy: 0,
             good_match: 0,
             nice_match: 0,
-            dyn_ltree_fc : [0, ..HEAP_SIZE],   /* literal and length tree */
-            dyn_ltree_dl : [0, ..HEAP_SIZE],   /* literal and length tree */
-            dyn_dtree_fc : [0, ..2*D_CODES+1], /* distance tree */
-            dyn_dtree_dl : [0, ..2*D_CODES+1], /* distance tree */
-            bl_tree_fc   : [0, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
-            bl_tree_dl   : [0, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
+            dyn_ltree_fc:  [0, ..HEAP_SIZE],   /* literal and length tree */
+            dyn_ltree_dl:  [0, ..HEAP_SIZE],   /* literal and length tree */
+            dyn_dtree_fc:  [0, ..2*D_CODES+1], /* distance tree */
+            dyn_dtree_dl:  [0, ..2*D_CODES+1], /* distance tree */
+            bl_tree_fc  :  [0, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
+            bl_tree_dl  :  [0, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
 
             l_desc: TreeDesc::new(StaticTreeDesc {
                 lengths: &STATIC_LTREE_LENGTHS,
@@ -439,19 +430,19 @@ impl InternalState
  */
 
 /// Bit length codes must not exceed `MAX_BL_BITS` bits
-const MAX_BL_BITS :uint = 7;
+const MAX_BL_BITS: uint = 7;
 
 /// End of block literal code
-const END_BLOCK :uint = 256;
+const END_BLOCK: uint = 256;
 
 /// Repeat previous bit length 3-6 times (2 bits of repeat count)
-const REP_3_6 :uint = 16;
+const REP_3_6: uint = 16;
 
 /// Repeat a zero length 3-10 times  (3 bits of repeat count)
-const REPZ_3_10 :uint = 17;
+const REPZ_3_10: uint = 17;
 
 /// Repeat a zero length 11-138 times  (7 bits of repeat count)
-const REPZ_11_138 :uint = 18;
+const REPZ_11_138: uint = 18;
 
 // from trees.c
 
@@ -482,7 +473,7 @@ impl TreeDesc {
     }
 }
 
-fn send_code(s :&mut DeflateState, c :u8, tree :&TreeDesc)
+fn send_code(s: &mut DeflateState, c: u8, tree: &TreeDesc)
 {
     // if (z_verbose>2) fprintf(stderr,"\ncd %3d ",(c));
     println!("send_code: {:3}", c);
@@ -496,7 +487,7 @@ fn send_code(s :&mut DeflateState, c :u8, tree :&TreeDesc)
  * Output a short LSB first on the stream.
  * IN assertion: there is enough room in pendingBuf.
  */
-fn put_short(s :&mut DeflateState, w :u16)
+fn put_short(s: &mut DeflateState, w: u16)
 {
     put_byte(s, (w & 0xff) as u8);
     put_byte(s, (w >> 8) as u8);
@@ -509,7 +500,7 @@ fn put_short(s :&mut DeflateState, w :u16)
  */
 // #ifdef DEBUG
 
-fn send_bits(s :&mut DeflateState, value: u32, length: uint)
+fn send_bits(s: &mut DeflateState, value: u32, length: uint)
     // DeflateState *s;
     // int value;  /* value to send */
     // int length; /* number of bits */
@@ -556,7 +547,7 @@ fn send_bits(s :&mut DeflateState, value: u32, length: uint)
  * Initialize a new block.
  */
 
-fn init_block(s :&mut DeflateState)
+fn init_block(s: &mut DeflateState)
 {
     /* Initialize the trees. */
     for n in range(0, L_CODES) { s.l_desc.fc[n] = 0; }
@@ -570,7 +561,7 @@ fn init_block(s :&mut DeflateState)
     s.matches = 0;
 }
 
-const SMALLEST :uint = 1;
+const SMALLEST: uint = 1;
 /* Index within the heap array of least frequent node in the Huffman tree */
 
 
@@ -578,7 +569,7 @@ const SMALLEST :uint = 1;
  * Remove the smallest element from the heap and recreate the heap with
  * one less element. Updates heap and heap_len.
  */
-fn pqremove(s :&mut DeflateState, tree :&TreeDesc) -> int
+fn pqremove(s: &mut DeflateState, tree: &TreeDesc) -> int
 {
     let top = s.heap[SMALLEST];
     s.heap_len -= 1;
@@ -591,7 +582,7 @@ fn pqremove(s :&mut DeflateState, tree :&TreeDesc) -> int
  * Compares two subtrees, using the tree depth as tie breaker when
  * the subtrees have equal frequency. This minimizes the worst case length.
  */
-fn smaller(tree :&TreeDesc, n :uint, m :uint, depth :&[u8]) -> bool
+fn smaller(tree: &TreeDesc, n: uint, m: uint, depth: &[u8]) -> bool
 {
     tree.fc/*freq*/[n] < tree.fc/*freq*/[m] || (tree.fc/*freq*/[n] == tree.fc/*freq*/[m] && depth[n] <= depth[m])
 }
@@ -604,7 +595,7 @@ fn smaller(tree :&TreeDesc, n :uint, m :uint, depth :&[u8]) -> bool
  */
 fn pqdownheap(
     s: &mut DeflateState,
-    tree :&TreeDesc,        /* the tree to restore */
+    tree: &TreeDesc,        /* the tree to restore */
     k: uint)                /* node to move down */
 {
     let mut k = k;
@@ -642,7 +633,7 @@ fn pqdownheap(
  *     The length opt_len is updated; static_len is also updated if stree is
  *     not null.
  */
-fn gen_bitlen(s :&mut DeflateState, desc)
+fn gen_bitlen(s: &mut DeflateState, desc)
      *s;
     TreeDesc *desc;    /* the tree descriptor */
 {

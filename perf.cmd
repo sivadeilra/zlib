@@ -18,3 +18,4 @@ target\release\ztrace.exe -F -i:100 -p %_input% >rs_perf.txt 2>&1
 rem if errorlevel 1 (echo ztrace failed & exit /b 1)
 
 type rs_perf.txt
+clip < rs_perf.txt

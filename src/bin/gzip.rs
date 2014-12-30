@@ -22,7 +22,7 @@ fn main()
 
     // open compressed input file, create a decompressor for it
     let input_file = io::BufferedReader::new(io::File::open(&input_path).unwrap());
-    let mut inflater = InflateReader::new(in_bufsize, 2, box input_file);
+    let mut inflater = InflateReader::new_gzip(in_bufsize, box input_file);
 
     println!("opened input file");
 

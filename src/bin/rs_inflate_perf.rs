@@ -7,7 +7,7 @@ extern crate zlib;
 use std::io;
 use std::os;
 use zlib::WINDOW_BITS_DEFAULT;
-use zlib::inflate::{InflateState,InflateResult};
+use zlib::inflate::{Inflater,InflateResult};
 use zlib::inflate::InflateReader;
 use std::io::IoErrorKind;
 use std::io::IoError;
@@ -40,7 +40,7 @@ fn main()
 
     let out_data = output_buffer.as_mut_slice();
 
-    let mut state = InflateState::new(WINDOW_BITS_DEFAULT, 2);
+    let mut state = Inflater::new_gzip();
 
     let iter_count: uint = 100;
 

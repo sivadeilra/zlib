@@ -446,11 +446,15 @@ unsigned copy;
 /* Macros for inflate(): */
 
 /* check function to use adler32() for zlib or crc32() for gzip */
+#if SKIP_CRC
+#define UPDATE(check, buf, len) check
+#else
 #ifdef GUNZIP
 #  define UPDATE(check, buf, len) \
     (state->flags ? crc32(check, buf, len) : adler32(check, buf, len))
 #else
 #  define UPDATE(check, buf, len) adler32(check, buf, len)
+#endif
 #endif
 
 /* check macros for header crc */
@@ -505,7 +509,7 @@ unsigned copy;
    if there is no input available. */
 #define PULLBYTE() \
     do { \
-        if (have == 0) goto inf_leave; \
+        if (have == 0) { Tracevv((stderr, "PULLBYTE: have=0, inf_leave\n")); goto inf_leave; } \
         have--; \
         hold += (unsigned long)(*next++) << bits; \
         bits += 8; \
@@ -1218,6 +1222,7 @@ int flush;
                     strm->adler = state->check =
                         UPDATE(state->check, put - out, out);
                 out = left;
+#if !SKIP_CRC
                 if ((
 #ifdef GUNZIP
                      state->flags ? hold :
@@ -1227,6 +1232,7 @@ int flush;
                     state->mode = BAD;
                     break;
                 }
+#endif
                 INITBITS();
                 Tracev((stderr, "inflate:   check matches trailer\n"));
             }

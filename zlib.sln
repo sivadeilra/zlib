@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "zlibtest", "tests\zlibtest\
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cpp_inflate_perf", "cpp_inflate_perf\cpp_inflate_perf.vcxproj", "{657B1078-2FB7-47B6-A225-ED85652680BF}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gzip", "gzip\gzip.vcxproj", "{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -89,6 +91,21 @@ Global
 		{657B1078-2FB7-47B6-A225-ED85652680BF}.Release|Win32.Build.0 = Release|Win32
 		{657B1078-2FB7-47B6-A225-ED85652680BF}.Release|x64.ActiveCfg = Release|x64
 		{657B1078-2FB7-47B6-A225-ED85652680BF}.Release|x64.Build.0 = Release|x64
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Debug|Win32.Build.0 = Debug|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Debug|x64.ActiveCfg = Debug|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Release_LLVM|Mixed Platforms.ActiveCfg = Release|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Release_LLVM|Mixed Platforms.Build.0 = Release|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Release_LLVM|Win32.ActiveCfg = Release|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Release_LLVM|Win32.Build.0 = Release|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Release_LLVM|x64.ActiveCfg = Release|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Release|Win32.ActiveCfg = Release|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Release|Win32.Build.0 = Release|Win32
+		{F191697A-AAEE-40D6-8AE8-AC17E1FF543A}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

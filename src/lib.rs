@@ -35,7 +35,6 @@ pub const WINDOW_BITS_MIN: uint = 8;
 pub const WINDOW_BITS_MAX: uint = 15;
 pub const WINDOW_BITS_DEFAULT: uint = WINDOW_BITS_MAX;
 
-
 #[deriving(Copy,Show,Eq,PartialEq)]
 pub enum WrapKind {
     Zlib,
@@ -43,31 +42,21 @@ pub enum WrapKind {
 }
 
 struct ZStream {
-    // pub next_in: uint,          // index of next input byte, within input_buffer (passed elsewhere)
-    // pub avail_in: uint,         // number of bytes available at next_in
-    pub total_in: u64,         // total number of input bytes read so far
-    // pub next_out: uint,         // position within output_buffer where to write the next byte
-    // pub avail_out: uint,        // remaining free space at next_out
-    pub total_out: u64,        // total number of bytes output so far
-    pub msg: Option<String>,    // last error message, if any
-    pub data_type :uint,        // best guess about the data type: binary or text
-    pub adler: u32              // adler32 value of the uncompressed data
+    pub total_in: u64,              // total number of input bytes read so far
+    pub total_out: u64,             // total number of bytes output so far
+    pub msg: Option<&'static str>,  // last error message, if any
+    pub data_type :uint,            // best guess about the data type: binary or text
+    pub adler: u32                  // adler32 value of the uncompressed data
 }
 
-impl ZStream
-{
-    pub fn new() -> ZStream
-    {
+impl ZStream {
+    pub fn new() -> ZStream {
         ZStream {
-            // next_in: 0,
-            // avail_in: 0,
             total_in: 0,
-            // next_out: 0,
-            // avail_out: 0,
             total_out: 0,
             msg: None,
-            data_type: 0,  /* best guess about the data type: binary or text */
-            adler: 0,      /* adler32 value of the uncompressed data */
+            data_type: 0,
+            adler: 0,
         }
     }
 }
@@ -105,18 +94,6 @@ impl GZipHeader {
         }
     }
 }
-
-/*
-     The application must update next_in and avail_in when avail_in has dropped
-   to zero.  It must update next_out and avail_out when avail_out has dropped
-   to zero.  All other fields are set by the compression
-   library and must not be updated by the application.
-
-     The fields total_in and total_out can be used for statistics or progress
-   reports.  After compression, total_in holds the total size of the
-   uncompressed data and may be saved for use in the decompressor (particularly
-   if the decompressor wants to decompress everything in a single step).
-*/
 
 /* constants */
 
@@ -179,8 +156,6 @@ pub const Z_UNKNOWN  :uint = 2;
 pub const Z_DEFLATED :uint = 8;
 /* The deflate compression method (the only one supported in this version) */
 
-
-
 /* Maximum value for windowBits in deflateInit2 and inflateInit2.
  * WARNING: reducing MAX_WBITS makes minigzip unable to extract .gz files
  * created by gzip. (Files created by minigzip can still be extracted by
@@ -189,11 +164,9 @@ pub const Z_DEFLATED :uint = 8;
 pub const MAX_WBITS :uint = 15; /* 32K LZ77 window */
 pub const DEF_WBITS :uint = MAX_WBITS;
 
-pub fn swap32(n: u32) -> u32
-{
+pub fn swap32(n: u32) -> u32 {
     (n >> 24)
     | ((n >> 8) & 0xff00)
     | ((n << 8) & 0xff0000)
     | (n << 24)
 }
-

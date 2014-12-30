@@ -2,13 +2,12 @@ use std::cmp::max;
 use std::io;
 use std::io::{Reader, IoResult};
 
-use inflate::{InflateState,InflateResult};
-use WINDOW_BITS_DEFAULT;
+use inflate::{Inflater,InflateResult};
 
 /// Provides an implementation of `Reader` for inflating (decompression) INFLATE / GZIP streams.
 pub struct InflateReader {
     src: Box<Reader + 'static>,
-    state: InflateState,
+    state: Inflater,
 
     inbuf: Vec<u8>,
     next_in: uint,
@@ -20,20 +19,24 @@ pub struct InflateReader {
 impl InflateReader
 {
     /// Creates a new InflateReader which uses `src` as its input stream.
-    pub fn new(
+    pub fn new_gzip(
         inbufsize: uint,
-        wrap: u32,
-        src: Box<Reader + 'static>) -> InflateReader
-    {
-        let inbufsize = max(inbufsize, 0x1000);
+        src: Box<Reader + 'static>) -> InflateReader {
+        InflateReader::new_with_inflater(inbufsize, Inflater::new_gzip(), src)
+    }
 
+    pub fn new_with_inflater(
+        inbufsize: uint,
+        inflater: Inflater,
+        src: Box<Reader + 'static>) -> InflateReader {
+        let inbufsize = max(inbufsize, 0x1000);
         InflateReader {
             src: src,
             inbuf: Vec::with_capacity(inbufsize),
             next_in: 0,
             src_eof: false,
-            state: InflateState::new(WINDOW_BITS_DEFAULT, wrap)
-        }
+            state: Inflater::new_gzip()
+        }        
     }
 }
 

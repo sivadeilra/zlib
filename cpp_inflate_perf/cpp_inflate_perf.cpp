@@ -38,10 +38,9 @@ int main(int argc, char* argv[])
 
     auto filename = argv[1];
 
-    int iter_count = 100;
-    int iter_group_count = 10;
+    int iter_count = 10;
     int input_buffer_size = 0x10000;
-    int output_buffer_size = 0x10000;
+    int output_buffer_size = 1 << 20;
 
     FILE* f = fopen(filename, "rb");
     if (f == nullptr) {
@@ -126,7 +125,7 @@ int main(int argc, char* argv[])
                 break;
             }
             else {
-                fprintf(stderr, "inflate() returned error: %d\n", zerr);
+                fprintf(stderr, "inflate() returned error: %d %s\n", zerr, strm.msg);
                 return 1;
             }
         }    

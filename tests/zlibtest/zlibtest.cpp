@@ -44,8 +44,8 @@ void usage()
         );
 }
 
-static const int DEFAULT_INPUT_BUFFER_SIZE = 0x1000;
-static const int DEFAULT_OUTPUT_BUFFER_SIZE = 0x1000;
+static const int DEFAULT_INPUT_BUFFER_SIZE = 0x10000;
+static const int DEFAULT_OUTPUT_BUFFER_SIZE = 0x10000;
 
 
 int main(int argc, char* argv[])

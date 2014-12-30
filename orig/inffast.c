@@ -221,7 +221,7 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
                     }
                     from = window - OFF;
                     if (wnext == 0) {           /* very common case */
-                        Tracevv((stderr, "wnext=0"));
+                        Tracevv((stderr, "wnext=0\n"));
                         from += wsize - op;
                         if (op < len) {         /* some from window */
                             len -= op;

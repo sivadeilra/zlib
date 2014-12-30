@@ -14,10 +14,10 @@ use self::inftrees::{Code, ENOUGH, CODES, LENS, DISTS, inflate_table};
 use std::default::Default;
 use GZipHeader;
 use ZStream;
-use DEF_WBITS;
 use swap32;
 use Flush;
 use Z_DEFLATED;
+use WINDOW_BITS_DEFAULT;
 use WINDOW_BITS_MIN;
 use WINDOW_BITS_MAX;
 
@@ -33,10 +33,10 @@ mod inffixed;
 macro_rules! BADINPUT {
     ($loc:expr, $msg:expr) => {
         {
-panic!("bad input, total_in={}: {}", $loc.state.strm.total_in, $msg); /* TEMPORARY
-            $loc.state.strm.msg = Some($msg.to_string());
+            warn!("bad input, total_in={}: {}", $loc.state.strm.total_in, $msg);
+            $loc.state.strm.msg = Some($msg);
             $loc.state.mode = InflateMode::BAD;
-            return inf_leave($loc); */
+            return;
         }
     }
 }
@@ -47,7 +47,8 @@ macro_rules! PULLBYTE {
     ($loc:expr) => {
         {
             if $loc.have() == 0 {
-                return inf_leave($loc);
+                debug!("PULLBYTE: have=0, inf_leave");
+                return;
             }
             let b = $loc.input_buffer[$loc.next];
             $loc.hold += b as u32 << $loc.bits;
@@ -161,9 +162,9 @@ macro_rules! goto_mode {
     }
 }
 
-/// Defines the state needed to inflate (decompress) a stream.
-/// Use InflateState::new() to create a stream.
-pub struct InflateState // was inflate_state
+/// Decompresses ("inflates") a stream of data.  Supports both `GZIP` and raw `DEFLATE` streams.
+/// Use `Inflater::new()` to create a stream.
+pub struct Inflater // was inflate_state
 {
     mode: InflateMode,          // current inflate mode
     last: bool,                 // true if processing last block
@@ -204,7 +205,7 @@ pub struct InflateState // was inflate_state
     nlen: uint,                 // number of length code lengths
     ndist: uint,                // number of distance code lengths
     have: uint,                 // number of code lengths in lens[]
-    next: uint,                 // next available space in codes[]   // index into codes[]
+    next: uint,                 // next available space in codes[]
     lens: [u16, ..320],         // temporary storage for code lengths
     work: [u16, ..288],         // work area for code table building
     codes: [Code, ..ENOUGH],    // space for code tables
@@ -212,18 +213,35 @@ pub struct InflateState // was inflate_state
     back: uint,                 // bits back of last unprocessed length/lit
     was: uint,                  // initial length of match
 
-    strm: ZStream
+    strm: ZStream,
+
+    pub counter_inffast: u32,
+    pub counter_mainloop: u32,
 }
 
-impl InflateState
-{
-    pub fn new(window_bits: uint, wrap: u32) -> InflateState
-    {
+impl Inflater {
+    /// Creates a new Inflater for decoding a GZIP stream.
+    /// 
+    /// A GZIP stream starts with a GZIP header, which is followed by a DEFLATE
+    /// stream, and ends with a GZIP trailer.  The header can specify the name
+    /// of the original file, the timestamp, the operating system used to generate
+    /// the file, etc.
+    pub fn new_gzip() -> Inflater {
+        Inflater::internal_new(WINDOW_BITS_DEFAULT, 2)
+    }
+
+    /// Creates a new Inflater for decoding a raw DEFLATE stream.  This should not
+    /// be used for decoding GZIP streams.
+    pub fn new_inflate(window_bits: uint) -> Inflater {
+        Inflater::internal_new(window_bits, 0)
+    }
+
+    fn internal_new(window_bits: uint, wrap: u32) -> Inflater {
         assert!(window_bits >= WINDOW_BITS_MIN && window_bits <= WINDOW_BITS_MAX);
 
         let wsize: uint = 1 << window_bits;
 
-        InflateState {
+        Inflater {
             mode: InflateMode::HEAD,
             last: false,
             wrap: wrap,                 // bit 0 true for zlib, bit 1 true for gzip
@@ -274,11 +292,14 @@ impl InflateState
             sane: false,                // if false, allow invalid distance too far
             back: 0,                    // bits back of last unprocessed length/lit
             was: 0,                     // initial length of match
-            strm: ZStream::new()
+            strm: ZStream::new(),
+
+            counter_mainloop: 0,
+            counter_inffast: 0
         }
     }
 
-    // was inflate_reset_keep 
+    // Resets the state of the decoder, without changing the contents of the window.
     pub fn reset_keep(&mut self) {
         self.strm.total_in = 0;
         self.strm.total_out = 0;
@@ -303,8 +324,13 @@ impl InflateState
         self.sane = true;
         self.back = -1;
         // debug!("inflate: reset");
+
+        self.counter_mainloop = 0;
+        self.counter_inffast = 0;
     }
 
+    /// Resets the state of the decoder.  This is equivalent to allocating a new Inflater, with
+    /// the same arguments that were used to construct this Inflater.
     pub fn reset(&mut self) {
         self.wsize = 0;
         self.whave = 0;
@@ -312,7 +338,7 @@ impl InflateState
         self.reset_keep();
     }
 
-    pub fn reset2(&mut self, window_bits: int) {
+    fn reset2(&mut self, window_bits: int) {
         let wrap: u32;
         let mut wbits = window_bits;
 
@@ -345,20 +371,7 @@ impl InflateState
         self.reset();
     }
 
-    pub fn init2(&mut self, window_bits: int)
-    {
-        self.strm.msg = None;                 // in case we return an error
-        self.window.clear();
-        self.reset2(window_bits);
-    }
-
-    pub fn init(&mut self)
-    {
-        self.init2(DEF_WBITS as int);
-    }
-
-    pub fn prime(&mut self, bits: int, value: u32)
-    {
+    pub fn prime(&mut self, bits: int, value: u32) {
         if bits < 0 {
             self.hold = 0;
             self.bits = 0;
@@ -373,13 +386,11 @@ impl InflateState
         self.bits += bits as uint;
     }
 
-    // The 'a lifetime allows inflate() to use input/output streams,
-    // whose lifetime is constrained to be less than that of strm/state.
-    pub fn inflate<'a>(
+    pub fn inflate(
         &mut self,
         flush: Option<Flush>,
-        input_buffer: &'a [u8],
-        output_buffer: &'a mut[u8]) -> InflateResult
+        input_buffer: &[u8],
+        output_buffer: &mut[u8]) -> InflateResult
     {
         debug!("inflate: avail_in={} avail_out={}", input_buffer.len(), output_buffer.len());
 
@@ -398,7 +409,7 @@ impl InflateState
             None => Flush::None
         };
 
-        let mut locs = InflateLocals {
+        let mut loc = InflateLocals {
             state: self,
             input_buffer: input_buffer,
             output_buffer: output_buffer,
@@ -409,7 +420,68 @@ impl InflateState
             flush: flush,
             is_goto: false,
         };
-        let loc = &mut locs;
+
+        Inflater::inflate_main_loop(&mut loc, flush);
+
+        // Return from inflate(), updating the total counts and the check value.
+        // If there was no progress during the inflate() call, return a buffer
+        // error.  Call updatewindow() to create and/or update the window state.
+        // Note: a memory error from inflate() is non-recoverable.
+
+        debug!("inf_leave");
+        restore_locals(&mut loc);
+
+        debug!("left={}", loc.left());
+
+        if loc.state.wsize != 0 || (loc.put != 0 && (loc.state.mode as u32) < (InflateMode::BAD as u32) &&
+                ((loc.state.mode as u32) < (InflateMode::CHECK as u32) || (loc.flush != Flush::Finish))) {
+
+            debug!("calling updatewindow()");
+            let mut put = loc.put;
+            if loc.state.mode as u32 >= InflateMode::CHECK as u32 {
+                put = 0; // don't ask
+            }
+            updatewindow(&mut loc, put, put);
+        }
+
+        debug!("avail_in={} avail_out={}", loc.avail_in(), loc.avail_out());
+
+        let in_inflated = loc.next;
+        let out_inflated = loc.put;
+
+        loc.state.strm.total_in += in_inflated as u64;
+        loc.state.strm.total_out += out_inflated as u64;
+        loc.state.total += out_inflated;
+
+        if loc.state.wrap != 0 && out_inflated != 0 {
+            let updated_check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice_to(out_inflated));
+            loc.state.strm.adler = updated_check;
+            loc.state.check = updated_check;
+        }
+        loc.state.strm.data_type = loc.state.bits
+            + (if loc.state.last { 64 } else { 0 })
+            + (if loc.state.mode as u32 == InflateMode::TYPE as u32 { 128 } else { 0 })
+            + (if loc.state.mode as u32 == InflateMode::LEN_ as u32 || loc.state.mode as u32 == InflateMode::COPY_ as u32 { 256 } else { 0 });
+
+    //    if (((loc.in_ == 0 && loc.out == 0) || loc.flush == Z_FINISH) && ret == Z_OK) {
+    //        ret = Z_BUF_ERROR;
+    //    }
+    //
+
+        if in_inflated != 0 || out_inflated != 0 {
+            InflateResult::Decoded(in_inflated, out_inflated)
+        }
+        else if loc.state.mode == InflateMode::DONE {
+            InflateResult::Eof(loc.state.check)
+        }
+        else {
+            warn!("need input, mode = {}", loc.state.mode);
+            InflateResult::NeedInput
+        }
+    }
+
+    #[inline(always)] // yes, i'm serious
+    fn inflate_main_loop(loc: &mut InflateLocals, flush: Flush) {
 
         let mut copy: uint;         // number of stored or match bytes to copy
         let mut last: Code;         // parent table entry
@@ -428,7 +500,9 @@ impl InflateState
         load_locals(loc);
 
         // ret = Z_OK;
-        loop {
+        'mainloop: loop {
+            loc.state.counter_mainloop += 1;
+
             if !cfg!(ndebug) {
                 if loc.is_goto {
                     loc.is_goto = false;
@@ -488,7 +562,7 @@ impl InflateState
                     loc.state.wbits = len;
                 }
                 else if len > loc.state.wbits {
-                    BADINPUT!(loc, "invalid window size".to_string());
+                    BADINPUT!(loc, "invalid window size");
                 }
                 loc.state.dmax = 1 << len;
                 // debug!("max distance (dmax) = {} 0x{:x}", loc.state.dmax, loc.state.dmax);
@@ -624,7 +698,7 @@ impl InflateState
                         loc.state.length -= copy;
                     }
                     if loc.state.length != 0 {
-                        return inf_leave(loc);
+                        break;
                     }
                 }
                 else {
@@ -638,7 +712,7 @@ impl InflateState
                 if (loc.state.flags & 0x0800) != 0 {
                     // debug!("NAME: header flags indicate that stream contains a NAME record");
                     if loc.have() == 0 {
-                        return inf_leave(loc);
+                        break;
                     }
                     let mut copy = 0;
                     loop {
@@ -658,10 +732,9 @@ impl InflateState
                         loc.state.check = crc32(loc.state.check, loc.input_buffer.slice(loc.next, loc.next + copy));
                     }
                     loc.next += copy;
-                    if len != 0 { return inf_leave(loc); }
+                    if len != 0 { break; }
                 }
-                else
-                {
+                else {
                     // debug!("NAME: header does not contain a NAME record");
                     /*TODO if (state.head != Z_NULL) {
                         state.head.name = Z_NULL;
@@ -676,7 +749,7 @@ impl InflateState
                     // debug!("COMMENT: header contains a COMMENT record");
                     if loc.have() == 0 {
                         // debug!("have no data, returning");
-                        return inf_leave(loc);
+                        break;
                     }
                     let mut copy = 0;
                     let mut len;
@@ -698,12 +771,12 @@ impl InflateState
                         }
                     }
                     if (loc.state.flags & 0x0200) != 0 {
-                        loc.state.check = crc32(loc.state.check, input_buffer.slice(loc.next, loc.next + copy));
+                        loc.state.check = crc32(loc.state.check, loc.input_buffer.slice(loc.next, loc.next + copy));
                     }
                     loc.next += copy;
                     if len != 0 {
                         // We have not received all of the bytes for the comment, so bail.
-                        return inf_leave(loc);
+                        break;
                     }
                 }
                 else {
@@ -762,7 +835,7 @@ impl InflateState
             InflateMode::TYPE => {
                 if flush == Flush::Block || flush == Flush::Trees {
                     debug!("TYPE: flush is Z_BLOCK or Z_TREES, returning");
-                    return inf_leave(loc);
+                    break;
                 }
                 goto_mode!(loc, TYPEDO);
             }
@@ -800,7 +873,7 @@ impl InflateState
                             loc.state.mode = InflateMode::LEN_; // decode codes
                             if flush == Flush::Trees {
                                 dropbits(loc, 2);
-                                return inf_leave(loc);
+                                break;
                             }
                         }
 
@@ -837,7 +910,7 @@ impl InflateState
                 loc.state.mode = InflateMode::COPY_;
                 if flush == Flush::Trees {
                     debug!("flush = Z_TREES, so returning");
-                    return inf_leave(loc);
+                    break;
                 }
                 goto_mode!(loc, COPY_);
             }
@@ -852,9 +925,9 @@ impl InflateState
                     if copy > loc.left() { copy = loc.left(); }
                     if copy == 0 {
                         // debug!("cannot copy data right now (no buffer space) -- exiting");
-                        return inf_leave(loc);
+                        break;
                     }
-                    copy_memory(loc.output_buffer.slice_mut(loc.put, copy), loc.input_buffer.slice(loc.next, loc.next + copy));
+                    copy_memory(loc.output_buffer.slice_mut(loc.put, loc.put + copy), loc.input_buffer.slice(loc.next, loc.next + copy));
                     loc.next += copy;
                     loc.put += copy;
                     loc.state.length -= copy;
@@ -991,7 +1064,7 @@ impl InflateState
                 loc.state.mode = InflateMode::LEN_;
                 if flush == Flush::Trees {
                     debug!("flush = Z_TREES, returning");
-                    return inf_leave(loc);
+                    break;
                 }
                 goto_mode!(loc, LEN_);
             }
@@ -1003,12 +1076,15 @@ impl InflateState
                 if loc.have() >= 6 && loc.left() >= 258 {
                     debug!("LEN: fast path");
                     restore_locals(loc);
-                    inflate_fast(
+                    loc.state.counter_inffast += 1;
+                    let iffr = inflate_fast(
                         loc.state,
                         loc.input_buffer,
                         loc.output_buffer, 
-                        &mut loc.next,
-                        &mut loc.put);
+                        loc.next,
+                        loc.put);
+                    loc.next = iffr.strm_next_in;
+                    loc.put = iffr.strm_next_out;
                     load_locals(loc);
                     debug!("left={}", loc.left());
                     if loc.state.mode == InflateMode::TYPE {
@@ -1131,7 +1207,7 @@ impl InflateState
                 let mut from :BufPos; // index into loc.input_buffer (actually, several different buffers)
                 if loc.left() == 0 {
                     debug!("MATCH: inf_leave");
-                    return inf_leave(loc);
+                    break;
                 }
                 let mut copy = loc.put;
                 debug!("copy={} state.offset={}", copy, loc.state.offset);
@@ -1216,7 +1292,7 @@ impl InflateState
 
             InflateMode::LIT => {
                 if loc.left() == 0 {
-                    return inf_leave(loc);
+                    break;
                 }
                 // debug!("LIT: write {}", loc.state.length as u8);
                 loc.output_buffer[loc.put] = loc.state.length as u8;
@@ -1273,7 +1349,7 @@ impl InflateState
             }
 
             InflateMode::DONE => {
-                return inf_leave(loc);
+                break;
             }
 
             InflateMode::BAD => {
@@ -1288,9 +1364,8 @@ impl InflateState
                 // ret = Z_DATA_ERROR;
                 // return inf_leave(loc);
             }
+
             /*
-            case MEM:
-                return Z_MEM_ERROR;
             case SYNC:
             default:
                 return Z_STREAM_ERROR;
@@ -1372,70 +1447,6 @@ impl InflateState
         self.distbits = 5;
     }
 }
-
-/*
-#ifdef MAKEFIXED
-#include <stdio.h>
-
-/*
-   Write out the inffixed.h that is #include'd above.  Defining MAKEFIXED also
-   defines BUILDFIXED, so the tables are built on the fly.  makefixed() writes
-   those tables to stdout, which would be piped to inffixed.h.  A small program
-   can simply call makefixed to do this:
-
-    void makefixed(void);
-
-    int main(void)
-    {
-        makefixed();
-        return 0;
-    }
-
-   Then that can be linked with zlib built with MAKEFIXED defined and run:
-
-    a.out > inffixed.h
- */
-void makefixed()
-{
-    unsigned low, size;
-    struct InflateState state;
-
-    fixedtables(&state);
-    puts("    /* inffixed.h -- table for decoding fixed codes");
-    puts("     * Generated automatically by makefixed().");
-    puts("     */");
-    puts("");
-    puts("    /* WARNING: this file should *not* be used by applications.");
-    puts("       It is part of the implementation of this library and is");
-    puts("       subject to change. Applications should only use zlib.h.");
-    puts("     */");
-    puts("");
-    size = 1U << 9;
-    printf("    static const code lenfix[%u] = {", size);
-    low = 0;
-    for (;;) {
-        if ((low % 7) == 0) printf("\n        ");
-        printf("{%u,%u,%d}", (low & 127) == 99 ? 64 : state.lencode[low].op,
-               state.lencode[low].bits, state.lencode[low].val);
-        if (++low == size) break;
-        putchar(',');
-    }
-    puts("\n    };");
-    size = 1U << 5;
-    printf("\n    static const code distfix[%u] = {", size);
-    low = 0;
-    for (;;) {
-        if ((low % 6) == 0) printf("\n        ");
-        printf("{%u,%u,%d}", state.distcode[low].op, state.distcode[low].bits,
-               state.distcode[low].val);
-        if (++low == size) break;
-        putchar(',');
-    }
-    puts("\n    };");
-}
-#endif /* MAKEFIXED */
-
-*/
 
 // Update the window with the last wsize (normally 32K) bytes written before
 // returning.  If window does not exist yet, create it.  This is only called
@@ -1520,21 +1531,21 @@ fn updatewindow(loc: &mut InflateLocals, end: uint, copy: uint) {
 /* Macros for inflate(): */
 
 /* check function to use adler32() for zlib or crc32() for gzip */
-// #ifdef GUNZIP
 // was UPDATE
 fn update(flags: u32, check: u32, data: &[u8]) -> u32
 {
+// #ifdef GUNZIP
     if flags != 0 {
         crc32(check, data)
     }
     else {
         adler32(check, data)
     }
+// #else
+// #  define UPDATE(check, buf, len) adler32(check, buf, len)
+// #endif
 }
-/*#else
-#  define UPDATE(check, buf, len) adler32(check, buf, len)
-#endif
-*/
+
 
 /* check macros for header crc */
 // #ifdef GUNZIP
@@ -1543,8 +1554,7 @@ fn update(flags: u32, check: u32, data: &[u8]) -> u32
 // Computes a CRC over two bytes.  The bytes are stored in a u32 value.
 // The bits are packed in "little-endian" form; byte[0] is in bits [0..7],
 // while byte[1] is in bits [8..15].
-fn crc2(check: u32, word: u32) -> u32
-{
+fn crc2(check: u32, word: u32) -> u32 {
     let mut hbuf :[u8, ..2] = [0, ..2];
     hbuf[0] = (word & 0xff) as u8;
     hbuf[1] = ((word >> 8) & 0xff) as u8;
@@ -1554,8 +1564,7 @@ fn crc2(check: u32, word: u32) -> u32
 // Computes a CRC over four bytes.  The bytes are stored in a u32 value.
 // The bits are packed in "little-endian" form; byte[0] is in bits [0..7],
 // while byte[1] is in bits [8..15], etc.
-fn crc4(check: u32, word: u32) -> u32
-{
+fn crc4(check: u32, word: u32) -> u32 {
     let mut hbuf = [0u8, ..4];
     hbuf[0] = (word & 0xff) as u8;
     hbuf[1] = ((word >> 8) & 0xff) as u8;
@@ -1568,13 +1577,8 @@ fn crc4(check: u32, word: u32) -> u32
 // was LOAD
 #[inline]
 fn load_locals(loc: &mut InflateLocals) {
-    // loc.left = loc.output_buffer.len() - loc.put;
-    // loc.have = loc.input_buffer.len() - loc.next;
     loc.hold = loc.state.hold;
     loc.bits = loc.state.bits;
-
-    // debug!("load_locals: put: {} left: {} next: {} have: {} hold: {} bits: {}",
-    //     loc.put, loc.left, loc.next, loc.have, loc.hold, loc.bits);
 }
 
 /* Restore state from registers in inflate() */
@@ -1595,12 +1599,14 @@ fn initbits(loc: &mut InflateLocals) {
 
 /* Return the low n bits of the bit accumulator (n < 16) */
 // was 'BITS'
+#[inline]
 fn bits(loc: &InflateLocals, n: uint) -> u32
 {
     loc.hold & ((1 << n) - 1)
 }
 
 // was BITBOOL
+#[inline]
 fn bitbool(loc: &InflateLocals) -> bool
 {
     bits(loc, 1) != 0
@@ -1714,7 +1720,7 @@ fn bytebits(loc: &mut InflateLocals) {
 
 struct InflateLocals<'a>
 {
-    state: &'a mut InflateState,
+    state: &'a mut Inflater,
 
     input_buffer: &'a [u8],
     output_buffer: &'a mut[u8],
@@ -1753,65 +1759,7 @@ impl<'a> InflateLocals<'a> {
     }
 }
 
-#[inline(never)]
-fn inf_leave(loc: &mut InflateLocals) -> InflateResult
-{
-    // Return from inflate(), updating the total counts and the check value.
-    // If there was no progress during the inflate() call, return a buffer
-    // error.  Call updatewindow() to create and/or update the window state.
-    // Note: a memory error from inflate() is non-recoverable.
 
-    debug!("inf_leave");
-    restore_locals(loc);
-
-    debug!("left={}", loc.left());
-
-    if loc.state.wsize != 0 || (loc.put != 0 && (loc.state.mode as u32) < (InflateMode::BAD as u32) &&
-            ((loc.state.mode as u32) < (InflateMode::CHECK as u32) || (loc.flush != Flush::Finish))) {
-
-        debug!("calling updatewindow()");
-        let mut put = loc.put;
-        if loc.state.mode as u32 >= InflateMode::CHECK as u32 {
-            put = 0; // don't ask
-        }
-        updatewindow(loc, put, put);
-    }
-
-    debug!("avail_in={} avail_out={}", loc.avail_in(), loc.avail_out());
-
-    let in_inflated = loc.next;
-    let out_inflated = loc.put;
-
-    loc.state.strm.total_in += in_inflated as u64;
-    loc.state.strm.total_out += out_inflated as u64;
-    loc.state.total += out_inflated;
-
-    if loc.state.wrap != 0 && out_inflated != 0 {
-        let updated_check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice(0, out_inflated));
-        loc.state.strm.adler = updated_check;
-        loc.state.check = updated_check;
-    }
-    loc.state.strm.data_type = loc.state.bits
-        + (if loc.state.last { 64 } else { 0 })
-        + (if loc.state.mode as u32 == InflateMode::TYPE as u32 { 128 } else { 0 })
-        + (if loc.state.mode as u32 == InflateMode::LEN_ as u32 || loc.state.mode as u32 == InflateMode::COPY_ as u32 { 256 } else { 0 });
-
-//    if (((loc.in_ == 0 && loc.out == 0) || loc.flush == Z_FINISH) && ret == Z_OK) {
-//        ret = Z_BUF_ERROR;
-//    }
-//
-
-    if in_inflated != 0 || out_inflated != 0 {
-        InflateResult::Decoded(in_inflated, out_inflated)
-    }
-    else if loc.state.mode == InflateMode::DONE {
-        InflateResult::Eof(loc.state.check)
-    }
-    else {
-        warn!("need input, mode = {}", loc.state.mode);
-        InflateResult::NeedInput
-    }
-}
 
 /*
 int ZEXPORT inflateGetDictionary(strm, dictionary, dictLength)
@@ -1819,11 +1767,11 @@ z_streamp strm;
 Bytef *dictionary;
 uInt *dictLength;
 {
-    struct InflateState FAR *state;
+    struct Inflater FAR *state;
 
     /* check state */
     if (strm == Z_NULL || strm.state == Z_NULL) return Z_STREAM_ERROR;
-    state = (struct InflateState FAR *)strm.state;
+    state = (struct Inflater FAR *)strm.state;
 
     /* copy dictionary */
     if (state.whave && dictionary != Z_NULL) {
@@ -1842,13 +1790,13 @@ z_streamp strm;
 const Bytef *dictionary;
 uInt dictLength;
 {
-    struct InflateState FAR *state;
+    struct Inflater FAR *state;
     unsigned long dictid;
     int ret;
 
     /* check state */
     if (strm == Z_NULL || strm.state == Z_NULL) return Z_STREAM_ERROR;
-    state = (struct InflateState FAR *)strm.state;
+    state = (struct Inflater FAR *)strm.state;
     if (state.wrap != 0 && state.mode != DICT)
         return Z_STREAM_ERROR;
 
@@ -1876,11 +1824,11 @@ int ZEXPORT inflateGetHeader(strm, head)
 z_streamp strm;
 gz_headerp head;
 {
-    struct InflateState FAR *state;
+    struct Inflater FAR *state;
 
     /* check state */
     if (strm == Z_NULL || strm.state == Z_NULL) return Z_STREAM_ERROR;
-    state = (struct InflateState FAR *)strm.state;
+    state = (struct Inflater FAR *)strm.state;
     if ((state.wrap & 2) == 0) return Z_STREAM_ERROR;
 
     /* save header structure */
@@ -1929,11 +1877,11 @@ z_streamp strm;
     unsigned len;               /* number of bytes to look at or looked at */
     unsigned long in, out;      /* temporary to save total_in and total_out */
     unsigned char buf[4];       /* to restore bit buffer to byte string */
-    struct InflateState FAR *state;
+    struct Inflater FAR *state;
 
     /* check parameters */
     if (strm == Z_NULL || strm.state == Z_NULL) return Z_STREAM_ERROR;
-    state = (struct InflateState FAR *)strm.state;
+    state = (struct Inflater FAR *)strm.state;
     if (strm.avail_in == 0 && state.bits < 8) return Z_BUF_ERROR;
 
     /* if first time, start search in bit buffer */
@@ -1977,10 +1925,10 @@ z_streamp strm;
 int ZEXPORT inflateSyncPoint(strm)
 z_streamp strm;
 {
-    struct InflateState FAR *state;
+    struct Inflater FAR *state;
 
     if (strm == Z_NULL || strm.state == Z_NULL) return Z_STREAM_ERROR;
-    state = (struct InflateState FAR *)strm.state;
+    state = (struct Inflater FAR *)strm.state;
     return state.mode == STORED && state.bits == 0;
 }
 
@@ -1988,8 +1936,8 @@ int ZEXPORT inflateCopy(dest, source)
 z_streamp dest;
 z_streamp source;
 {
-    struct InflateState FAR *state;
-    struct InflateState FAR *copy;
+    struct Inflater FAR *state;
+    struct Inflater FAR *copy;
     unsigned char FAR *window;
     unsigned wsize;
 
@@ -1997,11 +1945,11 @@ z_streamp source;
     if (dest == Z_NULL || source == Z_NULL || source.state == Z_NULL ||
         source.zalloc == (alloc_func)0 || source.zfree == (free_func)0)
         return Z_STREAM_ERROR;
-    state = (struct InflateState FAR *)source.state;
+    state = (struct Inflater FAR *)source.state;
 
     /* allocate space */
-    copy = (struct InflateState FAR *)
-           ZALLOC(source, 1, sizeof(struct InflateState));
+    copy = (struct Inflater FAR *)
+           ZALLOC(source, 1, sizeof(struct Inflater));
     if (copy == Z_NULL) return Z_MEM_ERROR;
     window = Z_NULL;
     if (state.window != Z_NULL) {
@@ -2015,7 +1963,7 @@ z_streamp source;
 
     /* copy state */
     copy_memory((voidpf)dest, (voidpf)source, sizeof(z_stream));
-    copy_memory((voidpf)copy, (voidpf)state, sizeof(struct InflateState));
+    copy_memory((voidpf)copy, (voidpf)state, sizeof(struct Inflater));
     if (state.lencode >= state.codes &&
         state.lencode <= state.codes + ENOUGH - 1) {
         copy.lencode = copy.codes + (state.lencode - state.codes);
@@ -2035,10 +1983,10 @@ int ZEXPORT inflateUndermine(strm, subvert)
 z_streamp strm;
 int subvert;
 {
-    struct InflateState FAR *state;
+    struct Inflater FAR *state;
 
     if (strm == Z_NULL || strm.state == Z_NULL) return Z_STREAM_ERROR;
-    state = (struct InflateState FAR *)strm.state;
+    state = (struct Inflater FAR *)strm.state;
     state.sane = !subvert;
 #ifdef INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR
     return Z_OK;
@@ -2051,10 +1999,10 @@ int subvert;
 long ZEXPORT inflateMark(strm)
 z_streamp strm;
 {
-    struct InflateState FAR *state;
+    struct Inflater FAR *state;
 
     if (strm == Z_NULL || strm.state == Z_NULL) return -1L << 16;
-    state = (struct InflateState FAR *)strm.state;
+    state = (struct Inflater FAR *)strm.state;
     return ((long)(state.back) << 16) +
         (state.mode == COPY ? state.length :
             (state.mode == MATCH ? state.was - state.length : 0));

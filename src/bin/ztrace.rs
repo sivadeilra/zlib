@@ -8,7 +8,7 @@ use std::io;
 use std::os;
 use std::os::set_exit_status;
 use zlib::{WINDOW_BITS_DEFAULT};
-use zlib::inflate::{InflateState,InflateResult};
+use zlib::inflate::{Inflater,InflateResult};
 use zlib::inflate::InflateReader;
 use std::io::IoErrorKind;
 use std::io::IoError;
@@ -64,7 +64,7 @@ struct CheckFileState {
 #[link(name = "kernel32")]
 extern "stdcall" {
     fn QueryPerformanceCounter(value: &mut u64) -> i32;
-    fn QueryPerformanceFrequency(value: &mut u64) -> i32;
+    // fn QueryPerformanceFrequency(value: &mut u64) -> i32;
 }
 
 struct Stopwatch {
@@ -104,8 +104,8 @@ fn main() {
     let mut iter_count: uint = 1;
     let mut input_filename: Option<String> = None;
     let mut check_filename: Option<String> = None;
-    let mut input_buffer_size: uint = 0x1000;
-    let mut output_buffer_size: uint = 0x1000;
+    let mut input_buffer_size: uint = 0x10000;
+    let mut output_buffer_size: uint = 0x10000;
     let mut verbose = false;
     let mut verbose_print_blocks = false;
     let mut read_entire_file = false;
@@ -229,7 +229,7 @@ fn main() {
 
     let out_data = output_buffer.as_mut_slice();
 
-    let mut state = InflateState::new(WINDOW_BITS_DEFAULT, 2);
+    let mut state = Inflater::new_gzip();
     let mut cycle: uint = 0;
 
     let mut watch = Stopwatch::new();
@@ -360,8 +360,7 @@ fn main() {
         watch.stop();
 
         if show_perf_results {
-            // println!("elapsed ticks: {}", watch.elapsed());
-            println!("{}", watch.elapsed());
+            println!("{:20}  {:20}  {:20}", watch.elapsed(), state.counter_mainloop, state.counter_inffast);
         }
     }
 }
