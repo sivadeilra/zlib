@@ -1282,8 +1282,6 @@ int flush;
     in -= strm->avail_in;
     out -= strm->avail_out;
 
-    Tracevv((stderr, "in=%d out=%d\n", in, out));
-
     strm->total_in += in;
     strm->total_out += out;
     state->total += out;

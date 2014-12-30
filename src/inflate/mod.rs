@@ -408,8 +408,6 @@ impl InflateState
             bits: 0,
             next: 0,
             put: 0,
-            in_: 0,
-            out: 0,
             flush: flush,
             is_goto: false,
         };
@@ -430,9 +428,6 @@ impl InflateState
             _ => ()
         }
         load_locals(loc);
-
-        loc.in_ = loc.have();
-        loc.out = loc.left();
 
         // ret = Z_OK;
         loop {
@@ -1017,8 +1012,7 @@ impl InflateState
                         loc.input_buffer,
                         loc.output_buffer, 
                         &mut loc.next,
-                        &mut loc.put,
-                        loc.out);
+                        &mut loc.put);
                     load_locals(loc);
                     debug!("left={}", loc.left());
                     if loc.state.mode == InflateMode::TYPE {
@@ -1143,7 +1137,7 @@ impl InflateState
                     debug!("MATCH: inf_leave");
                     return inf_leave(loc);
                 }
-                let mut copy = loc.out - loc.left();
+                let mut copy = loc.put;
                 debug!("copy={} state.offset={}", copy, loc.state.offset);
                 if loc.state.offset > copy {         /* copy from window */
                     copy = loc.state.offset - copy;
@@ -1238,19 +1232,18 @@ impl InflateState
                 // let mut from: uint; // index into loc.input_buffer
                 if loc.state.wrap != 0 {
                     NEEDBITS!(loc, 32);
-                    loc.out -= loc.left();
-                    loc.strm.total_out += loc.out as u64;
-                    loc.state.total += loc.out;
-                    if loc.out != 0 {
-                        let check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice(loc.put - loc.out, loc.put));
+                    loc.strm.total_out += loc.put as u64;
+                    loc.state.total += loc.put;
+                    if loc.put != 0 {
+                        let check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice_to(loc.put));
                         loc.strm.adler = check;
                         loc.state.check = check;
                     }
-                    loc.out = loc.left();
     // #ifdef GUNZIP
                     let ch = if loc.state.flags != 0 { loc.hold } else { swap32(loc.hold) };
                     if ch != loc.state.check {
-                        BADINPUT!(loc, "incorrect data check");
+                        // not implemented yet
+                        // BADINPUT!(loc, "incorrect data check");
                     }
     // #else
     //              if ((ZSWAP32(hold)) != state.check) {
@@ -1718,8 +1711,6 @@ struct InflateLocals<'a>
     bits: uint,         // bits in bit buffer
     next: uint,         // next input; is an index into input_buffer
     put: uint,          // next output; is an index into output_buffer
-    in_: uint,          // save starting available input
-    out: uint,          // save starting available output
 
     // loc.left = loc.output_buffer.len() - loc.put;
     // loc.have = loc.input_buffer.len() - loc.next;
@@ -1765,30 +1756,27 @@ fn inf_leave(loc: &mut InflateLocals) -> InflateResult
 
     debug!("left={}", loc.left());
 
-    if loc.state.wsize != 0 || (loc.out != loc.avail_out() && (loc.state.mode as u32) < (InflateMode::BAD as u32) &&
+    if loc.state.wsize != 0 || (loc.put != 0 && (loc.state.mode as u32) < (InflateMode::BAD as u32) &&
             ((loc.state.mode as u32) < (InflateMode::CHECK as u32) || (loc.flush != Flush::Finish))) {
+
         debug!("calling updatewindow()");
-        assert!(loc.out >= loc.avail_out());
-        let e = loc.put;
-        let c = loc.out - loc.avail_out();
-        updatewindow(loc, e, c);
+        let mut put = loc.put;
+        if loc.state.mode as u32 >= InflateMode::CHECK as u32 {
+            put = 0; // don't ask
+        }
+        updatewindow(loc, put, put);
     }
 
     debug!("avail_in={} avail_out={}", loc.avail_in(), loc.avail_out());
 
-    loc.in_ -= loc.avail_in();
-    loc.out -= loc.avail_out();
+    let in_inflated = loc.next;
+    let out_inflated = loc.put;
 
-    debug!("in={} out={}", loc.in_, loc.out);
-
-    let in_inflated = loc.in_;
-    let out_inflated = loc.out;
-
-    loc.strm.total_in += loc.in_ as u64;
-    loc.strm.total_out += loc.out as u64;
-    loc.state.total += loc.out;
-    if loc.state.wrap != 0 && loc.out != 0 {
-        let updated_check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice(loc.put - loc.out, loc.put));
+    loc.strm.total_in += in_inflated as u64;
+    loc.strm.total_out += out_inflated as u64;
+    loc.state.total += out_inflated;
+    if loc.state.wrap != 0 && out_inflated != 0 {
+        let updated_check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice(0, out_inflated));
         loc.strm.adler = updated_check;
         loc.state.check = updated_check;
     }

@@ -71,8 +71,8 @@ int main(int argc, char* argv[])
         if (arg[0] == '-') {
             int pos = (int)arg.find_first_of(':', 1);
 
-            string name = (i < 0) ? arg.substr(1) : arg.substr(1, pos - 1);
-            string value = (i < 0) ? string() : arg.substr(pos + 1);
+            string name = (pos < 0) ? arg.substr(1) : arg.substr(1, pos - 1);
+            string value = (pos < 0) ? string() : arg.substr(pos + 1);
 
             if (name == "i") {
                 iter_count = atoi(value.c_str());
@@ -235,7 +235,7 @@ int main(int argc, char* argv[])
             }
             err = inflate(&strm, /*flush*/0);
 
-            if (err == Z_OK) {
+            if (err == Z_OK || err == Z_STREAM_END) {
                 if (verbose) {
                     int input_bytes_read = (int)(strm.next_in - old_next_in);
                     int output_bytes_written = (int)(strm.next_out - output_buffer);
@@ -243,12 +243,13 @@ int main(int argc, char* argv[])
                     fprintf(stderr, "total_in = %d\n", strm.total_in);
                     print_block(output_buffer, output_bytes_written);
                 }
-            }
-            else if (err == Z_STREAM_END) {
-                if (verbose) {
-                    fprintf(stderr, "zlib says Z_STREAM_END\n");
+
+                if (err == Z_STREAM_END) {
+                    if (verbose) {
+                        fprintf(stderr, "zlib says Z_STREAM_END\n");
+                    }
+                    break;
                 }
-                break;
             }
             else if (err == Z_STREAM_ERROR) {
                 fprintf(stderr, "oh no, Z_STREAM_ERROR\n");

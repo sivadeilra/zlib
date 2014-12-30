@@ -16,3 +16,8 @@ orig/Release/
 *.vcxproj.user
 *.obj
 *.pch
+x64/
+orig/x64/
+*.ilk
+*.pdb
+ipch/

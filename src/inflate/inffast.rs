@@ -131,8 +131,7 @@ pub fn inflate_fast(
     input_buffer: &[u8],
     output_buffer: &mut [u8],
     strm_next_in: &mut uint,
-    strm_next_out: &mut uint,
-    start: uint)                 /* inflate()'s starting value for strm.avail_out */
+    strm_next_out: &mut uint)
 {
     assert!(input_buffer.len() >= 5);
     assert!(output_buffer.len() >= 257);
