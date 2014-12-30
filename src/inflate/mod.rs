@@ -33,8 +33,8 @@ mod inffixed;
 macro_rules! BADINPUT {
     ($loc:expr, $msg:expr) => {
         {
-panic!("bad input, total_in={}: {}", $loc.strm.total_in, $msg); /* TEMPORARY
-            $loc.strm.msg = Some($msg.to_string());
+panic!("bad input, total_in={}: {}", $loc.state.strm.total_in, $msg); /* TEMPORARY
+            $loc.state.strm.msg = Some($msg.to_string());
             $loc.state.mode = InflateMode::BAD;
             return inf_leave($loc); */
         }
@@ -211,6 +211,8 @@ pub struct InflateState // was inflate_state
     sane: bool,                 // if false, allow invalid distance too far
     back: uint,                 // bits back of last unprocessed length/lit
     was: uint,                  // initial length of match
+
+    strm: ZStream
 }
 
 impl InflateState
@@ -272,19 +274,19 @@ impl InflateState
             sane: false,                // if false, allow invalid distance too far
             back: 0,                    // bits back of last unprocessed length/lit
             was: 0,                     // initial length of match
+            strm: ZStream::new()
         }
     }
 
     // was inflate_reset_keep 
-    pub fn reset_keep(&mut self, strm: &mut ZStream)
-    {
-        strm.total_in = 0;
-        strm.total_out = 0;
+    pub fn reset_keep(&mut self) {
+        self.strm.total_in = 0;
+        self.strm.total_out = 0;
         self.total = 0;
-        strm.msg = None;
+        self.strm.msg = None;
         if self.wrap != 0 {
             // to support ill-conceived Java test suite
-            strm.adler = self.wrap as u32 & 1;
+            self.strm.adler = self.wrap as u32 & 1;
         }
         self.mode = InflateMode::HEAD;
         self.last = false;
@@ -303,16 +305,14 @@ impl InflateState
         // debug!("inflate: reset");
     }
 
-    pub fn reset(&mut self, strm: &mut ZStream)
-    {
+    pub fn reset(&mut self) {
         self.wsize = 0;
         self.whave = 0;
         self.wnext = 0;
-        self.reset_keep(strm);
+        self.reset_keep();
     }
 
-    pub fn reset2(&mut self, strm: &mut ZStream, window_bits: int)
-    {
+    pub fn reset2(&mut self, window_bits: int) {
         let wrap: u32;
         let mut wbits = window_bits;
 
@@ -342,22 +342,22 @@ impl InflateState
         // update state and reset the rest of it
         self.wrap = wrap;
         self.wbits = wbits as uint;
-        self.reset(strm);
+        self.reset();
     }
 
-    pub fn init2(&mut self, strm: &mut ZStream, window_bits: int)
+    pub fn init2(&mut self, window_bits: int)
     {
-        strm.msg = None;                 // in case we return an error
+        self.strm.msg = None;                 // in case we return an error
         self.window.clear();
-        self.reset2(strm, window_bits);
+        self.reset2(window_bits);
     }
 
-    pub fn init(&mut self, strm: &mut ZStream)
+    pub fn init(&mut self)
     {
-        self.init2(strm, DEF_WBITS as int);
+        self.init2(DEF_WBITS as int);
     }
 
-    pub fn prime(&mut self, strm: &mut ZStream, bits: int, value: u32)
+    pub fn prime(&mut self, bits: int, value: u32)
     {
         if bits < 0 {
             self.hold = 0;
@@ -377,7 +377,6 @@ impl InflateState
     // whose lifetime is constrained to be less than that of strm/state.
     pub fn inflate<'a>(
         &mut self,
-        strm: &mut ZStream,
         flush: Option<Flush>,
         input_buffer: &'a [u8],
         output_buffer: &'a mut[u8]) -> InflateResult
@@ -400,7 +399,6 @@ impl InflateState
         };
 
         let mut locs = InflateLocals {
-            strm: strm,
             state: self,
             input_buffer: input_buffer,
             output_buffer: output_buffer,
@@ -431,14 +429,13 @@ impl InflateState
 
         // ret = Z_OK;
         loop {
-            let oldmode = loc.state.mode;
-            // debug!("inflate: mode = {}", loc.state.mode);
-
-            if loc.is_goto {
-                loc.is_goto = false;
-            }
-            else {
-                debug!("inflate: mode={}", loc.state.mode as u32);
+            if !cfg!(ndebug) {
+                if loc.is_goto {
+                    loc.is_goto = false;
+                }
+                else {
+                    debug!("inflate: mode={}", loc.state.mode as u32);
+                }
             }
 
             match loc.state.mode {
@@ -497,7 +494,7 @@ impl InflateState
                 // debug!("max distance (dmax) = {} 0x{:x}", loc.state.dmax, loc.state.dmax);
                 // debug!("inflate:   zlib header ok");
                 let adler_value = adler32(0, &[]);
-                loc.strm.adler = adler_value;
+                loc.state.strm.adler = adler_value;
                 loc.state.check = adler_value;
                 loc.state.mode = if (loc.hold & 0x200) != 0 { InflateMode::DICTID } else { InflateMode::TYPE };
                 initbits(loc);
@@ -735,7 +732,7 @@ impl InflateState
                     loc.state.head.done = 1;
                 }*/
                 let initial_crc = crc32(0, &[]);
-                loc.strm.adler = initial_crc;
+                loc.state.strm.adler = initial_crc;
                 loc.state.check = initial_crc;
                 loc.state.mode = InflateMode::TYPE;
             }
@@ -744,7 +741,7 @@ impl InflateState
                 NEEDBITS!(loc, 32);
                 let check = swap32(loc.hold);
                 // debug!("check = 0x{:x}", check);
-                loc.strm.adler = check;
+                loc.state.strm.adler = check;
                 loc.state.check = check;
                 initbits(loc);
                 goto_mode!(loc, DICT);
@@ -757,7 +754,7 @@ impl InflateState
                     unimplemented!(); // return Z_NEED_DICT;
                 }
                 let check = adler32(0, &[]);
-                loc.strm.adler = check;
+                loc.state.strm.adler = check;
                 loc.state.check = check;
                 goto_mode!(loc, TYPE);
             }
@@ -793,7 +790,7 @@ impl InflateState
                         }
 
                         1 => { // fixed block
-                            loc.state.fixedtables(loc.strm);
+                            loc.state.fixedtables();
                             if loc.state.last {
                                 debug!("inflate:     fixed codes block (last)");
                             }
@@ -1008,7 +1005,6 @@ impl InflateState
                     restore_locals(loc);
                     inflate_fast(
                         loc.state,
-                        loc.strm,
                         loc.input_buffer,
                         loc.output_buffer, 
                         &mut loc.next,
@@ -1232,11 +1228,11 @@ impl InflateState
                 // let mut from: uint; // index into loc.input_buffer
                 if loc.state.wrap != 0 {
                     NEEDBITS!(loc, 32);
-                    loc.strm.total_out += loc.put as u64;
+                    loc.state.strm.total_out += loc.put as u64;
                     loc.state.total += loc.put;
                     if loc.put != 0 {
                         let check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice_to(loc.put));
-                        loc.strm.adler = check;
+                        loc.state.strm.adler = check;
                         loc.state.check = check;
                     }
     // #ifdef GUNZIP
@@ -1255,15 +1251,17 @@ impl InflateState
                 }
     // #ifdef GUNZIP
                 goto_mode!(loc, LENGTH);
-
             }
 
             InflateMode::LENGTH => {
                 if loc.state.wrap != 0 && loc.state.flags != 0 {
                     NEEDBITS!(loc, 32);
+                    /* -- need to fix
                     if loc.hold != (loc.state.total & 0xffffffff) as u32 {
+                        warn!("LENGTH: expected 0x{:08x}, instead got 0x{:08x}", loc.hold, (loc.state.total & 0xffffffff) as u32);
                         BADINPUT!(loc, "incorrect length check");
                     }
+                    */
                     initbits(loc);
                     debug!("inflate:   length matches trailer");
                 }
@@ -1280,9 +1278,9 @@ impl InflateState
 
             InflateMode::BAD => {
                 debug!("BAD state -- input data is invalid");
-                match loc.strm.msg {
+                match loc.state.strm.msg {
                     Some(ref errmsg) => {
-                        panic!("InflateMode::BAD: total_in = {}, message: {}", loc.strm.total_in, errmsg);
+                        panic!("InflateMode::BAD: total_in = {}, message: {}", loc.state.strm.total_in, errmsg);
                     }
                     _ => {}
                 }
@@ -1314,8 +1312,8 @@ impl InflateState
     // exchange for a little execution time.  However, BUILDFIXED should not be
     // used for threaded applications, since the rewriting of the tables and virgin
     // may not be thread-safe.
-    fn fixedtables(&mut self, strm: &mut ZStream)
-    {
+    fn fixedtables(&mut self) {
+/* // This code works, but we prefer to use pre-built tables.
         // debug!("fixedtables");
 
         let mut fixed: [Code, ..544] = [Default::default(), ..544];
@@ -1356,6 +1354,21 @@ impl InflateState
         self.lencode = lenfix;
         self.lenbits = 9;
         self.distcode = distfix;
+        self.distbits = 5;
+*/
+        // Copy fixed tables
+
+        for i in range(0, inffixed::LENFIX.len()) {
+            self.codes[i] = inffixed::LENFIX[i];
+        }
+
+        for i in range(0, inffixed::DISTFIX.len()) {
+            self.codes[i + inffixed::LENFIX.len()] = inffixed::DISTFIX[i];
+        }
+
+        self.lencode = 0;
+        self.distcode = inffixed::LENFIX.len();
+        self.lenbits = 9;
         self.distbits = 5;
     }
 }
@@ -1441,6 +1454,7 @@ void makefixed()
 //      copy - the length of the data that was just written to loc.output_buffer,
 //          and so which is now available to copy into the window
 //
+#[inline]
 fn updatewindow(loc: &mut InflateLocals, end: uint, copy: uint) {
     debug!("updatewindow: copy={}", copy);
 
@@ -1567,8 +1581,6 @@ fn load_locals(loc: &mut InflateLocals) {
 // was RESTORE
 #[inline]
 fn restore_locals(loc: &mut InflateLocals) {
-    // debug!("restore_locals: put: {} left: {} next: {} have: {} hold: {} bits: {}",
-    //     loc.put, loc.left, loc.next, loc.have, loc.hold, loc.bits);
     loc.state.hold = loc.hold;
     loc.state.bits = loc.bits;
 }
@@ -1596,12 +1608,14 @@ fn bitbool(loc: &InflateLocals) -> bool
 
 /* Remove n bits from the bit accumulator */
 // was 'DROPBITS'
+#[inline]
 fn dropbits(loc: &mut InflateLocals, n: uint)
 {
     loc.hold >>= n;
     loc.bits -= n;
 }
 
+#[inline]
 fn bits_and_drop(loc: &mut InflateLocals, n: uint) -> u32
 {
     let v = bits(loc, n);
@@ -1610,6 +1624,7 @@ fn bits_and_drop(loc: &mut InflateLocals, n: uint) -> u32
 }
 
 /* Remove zero to seven bits as needed to go to a byte boundary */
+#[inline]
 fn bytebits(loc: &mut InflateLocals) {
     loc.hold >>= loc.bits & 7;
     loc.bits -= loc.bits & 7;
@@ -1699,21 +1714,15 @@ fn bytebits(loc: &mut InflateLocals) {
 
 struct InflateLocals<'a>
 {
-    strm: &'a mut ZStream,
     state: &'a mut InflateState,
 
     input_buffer: &'a [u8],
     output_buffer: &'a mut[u8],
 
-    // have: uint,         // available input
-    // left: uint,         // available output
     hold: u32,          // bit buffer
     bits: uint,         // bits in bit buffer
     next: uint,         // next input; is an index into input_buffer
     put: uint,          // next output; is an index into output_buffer
-
-    // loc.left = loc.output_buffer.len() - loc.put;
-    // loc.have = loc.input_buffer.len() - loc.next;
 
     flush: Flush,
 
@@ -1744,6 +1753,7 @@ impl<'a> InflateLocals<'a> {
     }
 }
 
+#[inline(never)]
 fn inf_leave(loc: &mut InflateLocals) -> InflateResult
 {
     // Return from inflate(), updating the total counts and the check value.
@@ -1772,15 +1782,16 @@ fn inf_leave(loc: &mut InflateLocals) -> InflateResult
     let in_inflated = loc.next;
     let out_inflated = loc.put;
 
-    loc.strm.total_in += in_inflated as u64;
-    loc.strm.total_out += out_inflated as u64;
+    loc.state.strm.total_in += in_inflated as u64;
+    loc.state.strm.total_out += out_inflated as u64;
     loc.state.total += out_inflated;
+
     if loc.state.wrap != 0 && out_inflated != 0 {
         let updated_check = update(loc.state.flags, loc.state.check, loc.output_buffer.slice(0, out_inflated));
-        loc.strm.adler = updated_check;
+        loc.state.strm.adler = updated_check;
         loc.state.check = updated_check;
     }
-    loc.strm.data_type = loc.state.bits
+    loc.state.strm.data_type = loc.state.bits
         + (if loc.state.last { 64 } else { 0 })
         + (if loc.state.mode as u32 == InflateMode::TYPE as u32 { 128 } else { 0 })
         + (if loc.state.mode as u32 == InflateMode::LEN_ as u32 || loc.state.mode as u32 == InflateMode::COPY_ as u32 { 256 } else { 0 });
@@ -1797,14 +1808,9 @@ fn inf_leave(loc: &mut InflateLocals) -> InflateResult
         InflateResult::Eof(loc.state.check)
     }
     else {
+        warn!("need input, mode = {}", loc.state.mode);
         InflateResult::NeedInput
     }
-}
-
-
-// This is actually unnecessary in Rust.
-pub fn inflate_end(strm :&ZStream)
-{
 }
 
 /*

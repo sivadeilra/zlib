@@ -15,12 +15,9 @@ if errorlevel 1 exit /b
 
 echo Running Rust zlib
 set RUST_LOG=debug
-target\ztrace.exe -v %_input% >ztrace-raw.txt 2>&1 
-
-echo Filtering debug prefixes out of ztrace-raw.txt
-perl filter-ztrace.pl < ztrace-raw.txt > ztrace.txt
+target\ztrace.exe -v -vv %_input% 2>&1 | perl filter-ztrace.pl > ztrace.txt
 
 rem echo Diffing
 rem start windiff reftrace.txt ztrace.txt
-perl firstdiff.pl > fd
+perl firstdiff.pl >fd
 echo Read 'fd' file for awesomeness

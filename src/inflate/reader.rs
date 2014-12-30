@@ -1,15 +1,14 @@
+use std::cmp::max;
 use std::io;
 use std::io::{Reader, IoResult};
+
 use inflate::{InflateState,InflateResult};
-use ZStream;
 use WINDOW_BITS_DEFAULT;
-use std::cmp::max;
 
 /// Provides an implementation of `Reader` for inflating (decompression) INFLATE / GZIP streams.
 pub struct InflateReader {
     src: Box<Reader + 'static>,
     state: InflateState,
-    strm: ZStream,
 
     inbuf: Vec<u8>,
     next_in: uint,
@@ -33,8 +32,7 @@ impl InflateReader
             inbuf: Vec::with_capacity(inbufsize),
             next_in: 0,
             src_eof: false,
-            state: InflateState::new(WINDOW_BITS_DEFAULT, wrap),
-            strm: ZStream::new(),
+            state: InflateState::new(WINDOW_BITS_DEFAULT, wrap)
         }
     }
 }
@@ -90,7 +88,7 @@ impl Reader for InflateReader {
             let inbuf = self.inbuf.slice_from(self.next_in);
             let buflen = buf.len();
             println!("InflateReader: calling inflate, in_len={} out_len={}", inbuf.len(), buflen - outpos);
-            match self.state.inflate(&mut self.strm, None, inbuf, buf.slice_from_mut(outpos)) {
+            match self.state.inflate(None, inbuf, buf.slice_from_mut(outpos)) {
                 InflateResult::Decoded(in_bytes, out_bytes) => {
                     println!("decoded: in_bytes={} out_bytes={}", in_bytes, out_bytes);
                     self.next_in += in_bytes;

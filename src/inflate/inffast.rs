@@ -3,7 +3,6 @@
  * For conditions of distribution and use, see copyright notice in zlib.h
  */
 
-use ZStream;
 use super::inftrees::Code;
 use super::InflateState;
 use super::InflateMode;
@@ -15,8 +14,21 @@ pub struct BufPos<'a> {
 }
 
 impl<'a> BufPos<'a> {
+    #[inline]
     pub fn read(&mut self) -> u8 {
-        let b = self.buf[self.pos];
+
+        // let b = self.buf[self.pos];
+
+        /*        
+        let b = if cfg!(unsafe_fast) {
+            unsafe { *self.buf.unsafe_get(self.pos) }
+        }
+        else {
+            self.buf[self.pos]
+        };
+        */
+        let b = unsafe { *self.buf.unsafe_get(self.pos) };
+
         self.pos += 1;
         b
     }
@@ -28,8 +40,16 @@ struct BufPosMut<'a> {
 }
 
 impl<'a> BufPosMut<'a> {
+    #[inline]
     pub fn write(&mut self, b: u8) {
-        self.buf[self.pos] = b;
+        if cfg!(unsafe_fast) {
+            unsafe {
+                *self.buf.unsafe_mut(self.pos) = b;
+            }
+        }
+        else {
+            self.buf[self.pos] = b;
+        }
         self.pos += 1;
     }
 }
@@ -42,6 +62,7 @@ struct InputState<'a> {
 }
 
 impl<'a> InputState<'a> {
+    #[inline]
     pub fn load_byte(&mut self) {
         let b = self.buf[self.pos];
         self.pos += 1;
@@ -49,6 +70,8 @@ impl<'a> InputState<'a> {
         self.bits += 8;
         // debug!("loaded 0x{:02x}, bits = {:2}, hold = 0x{:08x}", b, self.bits, self.hold);
     }
+
+    #[inline]
     pub fn drop_bits(&mut self, n: uint) {
         self.bits -= n;
         self.hold >>= n;
@@ -91,8 +114,10 @@ impl<'a> InputState<'a> {
 //    output space.
 //
 
-fn copy_within_output_buffer(buf: &mut [u8], dstpos: uint, srcpos: uint, len: uint)
-{
+#[inline(never)]
+fn copy_within_output_buffer(buf: &mut [u8], dstpos: uint, srcpos: uint, len: uint) {
+    // correct, known good
+
     // debug!("srcpos = {}, dstpos = {}, len = {}", srcpos, dstpos, len);
     // the source region must be at lower indices than the dest region
 
@@ -105,9 +130,7 @@ fn copy_within_output_buffer(buf: &mut [u8], dstpos: uint, srcpos: uint, len: ui
         debug_assert!(srcpos + len <= dstpos);
 
         let (src_split, dst_split) = buf.split_at_mut(dstpos);
-        // debug!("src_split.len() = {}, dst_split.len() = {}", src_split.len(), dst_split.len());
         let src_buf = src_split.slice(srcpos, srcpos + len);
-        // debug!("src_buf.len() = {}", src_buf.len());
         copy_memory(dst_split, src_buf);
     }
     else {
@@ -116,6 +139,22 @@ fn copy_within_output_buffer(buf: &mut [u8], dstpos: uint, srcpos: uint, len: ui
             buf[dstpos + i] = buf[srcpos + i];
         }
     }
+
+    /*
+    // correct, simple, kinda slow
+    for i in range(0, len) {
+        buf[dstpos + i] = buf[srcpos + i];
+    }
+    */
+
+    /*
+    // correct, simple, unsafe, and no faster than copy_memory()
+    unsafe {
+        for i in range(0, len) {
+            *buf.unsafe_mut(dstpos + i) = *buf.unsafe_get(srcpos + i);
+        }
+    }
+    */
 }
 
 #[deriving(Show)]
@@ -125,16 +164,16 @@ enum InflateFastState {
     DoLen
 }
 
+#[inline(never)]
 pub fn inflate_fast(
     state: &mut InflateState,
-    strm: &mut ZStream,
     input_buffer: &[u8],
     output_buffer: &mut [u8],
     strm_next_in: &mut uint,
     strm_next_out: &mut uint)
 {
-    assert!(input_buffer.len() >= 5);
-    assert!(output_buffer.len() >= 257);
+    debug_assert!(input_buffer.len() >= 5);
+    debug_assert!(output_buffer.len() >= 257);
 
     let in_pos_start = *strm_next_in;
     let out_pos_start = *strm_next_out;
@@ -146,7 +185,7 @@ pub fn inflate_fast(
     // beg = out_pos_start - (0 - (start - next_out));
 
     let end :uint = out.buf.len() - 257; // out.pos + (*strm_avail_out - 257);       // while out < end, enough space available
-    assert!(*strm_next_out <= end);
+    debug_assert!(*strm_next_out <= end);
 
 // #ifdef INFLATE_STRICT
     let dmax: uint = state.dmax;                    // maximum distance from zlib header
@@ -254,7 +293,6 @@ pub fn inflate_fast(
                         input.load_byte();
                     }
                     here = codes[dcode + (input.hold & dmask) as uint];
-                    // debug!("st := DoDist");
                     st = InflateFastState::DoDist;
                     continue;
                 }
@@ -273,7 +311,7 @@ pub fn inflate_fast(
                     break;
                 }
                 else {
-                    strm.msg = Some("invalid literal/length code".to_string());
+                    state.strm.msg = Some("invalid literal/length code".to_string());
                     state.mode = InflateMode::BAD;
                     break;
                 }
@@ -312,7 +350,7 @@ pub fn inflate_fast(
     // #ifdef INFLATE_STRICT
                     if dist > dmax {
                         debug!("invalid distance, too far back.  dist {} > dmax {}", dist, dmax);
-                        strm.msg = Some("invalid distance too far back".to_string());
+                        state.strm.msg = Some("invalid distance too far back".to_string());
                         state.mode = InflateMode::BAD;
                         break;
                     }
@@ -337,7 +375,7 @@ pub fn inflate_fast(
                         // Tracevv!("maxout = dist - maxout = {}", maxout);
                         if maxout > whave {
                             if state.sane {
-                                strm.msg = Some("invalid distance too far back".to_string());
+                                state.strm.msg = Some("invalid distance too far back".to_string());
                                 state.mode = InflateMode::BAD;
                                 break;
                             }
@@ -369,26 +407,6 @@ pub fn inflate_fast(
                         }
 
                         // Next, decide what we are going to copy to the output.
-
-                        fn copy_to_output(out: &mut BufPosMut, from: &mut BufPos, len: &mut uint)
-                        {
-                            while *len > 0 {
-                                out.write(from.read());
-                                *len -= 1;
-                            }
-                        }
-
-                        fn copy_to_output_from_history(buf: &mut [u8], pos: uint, dist: uint, len: uint)
-                        {
-                            assert!(dist <= pos);
-                            assert!(dist + len <= pos);
-
-                            // Because we need to copy within a single buffer, we have to split it.
-                            let (src_buf, dst_buf) = buf.split_at_mut(pos);
-                            let src_buf = src_buf.slice(src_buf.len() - dist, len);
-                            let dst_buf = dst_buf.slice_mut(0, len);
-                            copy_memory(dst_buf, src_buf);
-                        }
 
                         let mut from = BufPos { buf: window, pos: 0 };
                         if wnext == 0 {
@@ -463,7 +481,6 @@ pub fn inflate_fast(
                         else {
                             // contiguous in window
                             // debug!("contiguous in window, advancing {}", wnext - maxout);
-
                             from.pos += wnext - maxout;
                             if maxout < len {
                                 // some from window
@@ -521,9 +538,8 @@ pub fn inflate_fast(
                     continue;
                 }
                 else {
-                    strm.msg = Some("invalid distance code".to_string());
+                    state.strm.msg = Some("invalid distance code".to_string());
                     state.mode = InflateMode::BAD;
-                    panic!("invalid distance code");
                     break;
                 }
                 InflateFastState::Start

@@ -6,7 +6,7 @@ extern crate zlib;
 
 use std::io;
 use std::os;
-use zlib::{WINDOW_BITS_DEFAULT,ZStream};
+use zlib::WINDOW_BITS_DEFAULT;
 use zlib::inflate::{InflateState,InflateResult};
 use zlib::inflate::InflateReader;
 use std::io::IoErrorKind;
@@ -40,7 +40,6 @@ fn main()
 
     let out_data = output_buffer.as_mut_slice();
 
-    let mut strm = ZStream::new();
     let mut state = InflateState::new(WINDOW_BITS_DEFAULT, 2);
 
     let iter_count: uint = 100;
@@ -49,7 +48,7 @@ fn main()
 
     for iter in range(0, iter_count) {
 
-        state.reset(&mut strm);
+        state.reset();
         let mut inpos: uint = 0; // position within input_data
 
         let mut cycle: uint = 0;
@@ -59,7 +58,7 @@ fn main()
             // let end = min(input_slice.len(), inpos);
             // let in_slice = input_slice.slice(inpos, end);
             let in_slice = input_slice.slice_from(inpos);
-            match state.inflate(&mut strm, None, in_slice, out_data) {
+            match state.inflate(None, in_slice, out_data) {
                 InflateResult::Eof(_) => {
                     println!("zlib says Z_STREAM_END");
                     break;

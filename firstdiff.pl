@@ -10,9 +10,6 @@ my $b;
 my $line = 0;
 
 @history = ();
-push(@history, "foo");
-push(@history, "bar");
-print "history=@history\n";
 
 $NHISTORY = 1000;
 

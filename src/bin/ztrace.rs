@@ -7,7 +7,7 @@ extern crate zlib;
 use std::io;
 use std::os;
 use std::os::set_exit_status;
-use zlib::{WINDOW_BITS_DEFAULT,ZStream};
+use zlib::{WINDOW_BITS_DEFAULT};
 use zlib::inflate::{InflateState,InflateResult};
 use zlib::inflate::InflateReader;
 use std::io::IoErrorKind;
@@ -61,6 +61,45 @@ struct CheckFileState {
     reader: io::File,
 }
 
+#[link(name = "kernel32")]
+extern "stdcall" {
+    fn QueryPerformanceCounter(value: &mut u64) -> i32;
+    fn QueryPerformanceFrequency(value: &mut u64) -> i32;
+}
+
+struct Stopwatch {
+    pub ticks_start: u64,
+    pub ticks_stop: u64,
+}
+
+impl Stopwatch {
+    pub fn new() -> Stopwatch {
+        Stopwatch {
+            ticks_start: 0,
+            ticks_stop: 0
+        }
+    }
+
+    pub fn start(&mut self) {
+        unsafe {
+            assert!(QueryPerformanceCounter(&mut self.ticks_start) != 0);
+        }
+        self.ticks_stop = 0;
+    }
+
+    pub fn stop(&mut self) {
+        unsafe {
+            assert!(QueryPerformanceCounter(&mut self.ticks_stop) != 0);
+        }
+    }
+
+    pub fn elapsed(&self) -> u64 {
+        self.ticks_stop - self.ticks_start
+    }
+}
+
+
+
 fn main() {
     let mut iter_count: uint = 1;
     let mut input_filename: Option<String> = None;
@@ -68,7 +107,9 @@ fn main() {
     let mut input_buffer_size: uint = 0x1000;
     let mut output_buffer_size: uint = 0x1000;
     let mut verbose = false;
+    let mut verbose_print_blocks = false;
     let mut read_entire_file = false;
+    let mut show_perf_results = false;
 
     let arg_prefix = "-";
 
@@ -99,6 +140,12 @@ fn main() {
                 }
                 "v" => {
                     verbose = true;
+                }
+                "vv" => {
+                    verbose_print_blocks = true;
+                }
+                "p" => {
+                    show_perf_results = true;
                 }
                 "c" => {
                     if check_filename == None {
@@ -152,7 +199,7 @@ fn main() {
     let mut input_buffer: Vec<u8>;
     if read_entire_file {
         input_buffer = input_file.read_to_end().unwrap();
-        println!("read entire input file");
+        // println!("read entire input file, size = {}", input_buffer.len());
     }
     else {
         println!("using buffered mode.");
@@ -182,18 +229,19 @@ fn main() {
 
     let out_data = output_buffer.as_mut_slice();
 
-    let mut strm = ZStream::new();
     let mut state = InflateState::new(WINDOW_BITS_DEFAULT, 2);
     let mut cycle: uint = 0;
 
-    let mut input_pos: uint = 0;
+    let mut watch = Stopwatch::new();
 
     for iter in range(0, iter_count) {
-        println!("starting iteration #{}", iter);
+        if verbose {
+            println!("starting iteration #{}", iter);
+        }
 
         // This is the decode loop for an entire file.
         input_file.seek(0, io::SeekSet).unwrap();
-        state.reset(&mut strm);
+        state.reset();
 
         if let Some(ref mut cs) = check_state {
             cs.reader.seek(0, io::SeekSet).unwrap();
@@ -201,6 +249,12 @@ fn main() {
         check_buffer.clear();
 
         let mut input_eof = false;
+        let mut total_in: u64 = 0;
+        let mut total_out: u64 = 0;
+
+        let mut input_pos: uint = 0;
+
+        watch.start();
 
         loop {
             if verbose {
@@ -220,7 +274,7 @@ fn main() {
                     }
                     Err(err) => {
                         if err.kind == IoErrorKind::EndOfFile {
-                            println!("input stream EOF");
+                            // println!("input stream EOF");
                             input_eof = true;
                         }
                         else {
@@ -231,13 +285,15 @@ fn main() {
                 };
             }
 
-            let total_out: u64 = strm.total_out;
             if verbose {
                 println!("calling inflate, cycle = {}, input_pos = {}, input_buffer.len = {}", cycle, input_pos, input_buffer.len());
             }
-            match state.inflate(&mut strm, None, input_buffer.slice_from(input_pos), out_data) {
+
+            match state.inflate(None, input_buffer.slice_from(input_pos), out_data) {
                 InflateResult::Eof(_) => {
-                    println!("zlib says Z_STREAM_END");
+                    if verbose {
+                        println!("zlib says Z_STREAM_END");
+                    }
                     break;
                 }
 
@@ -249,10 +305,13 @@ fn main() {
                 InflateResult::Decoded(input_bytes_read, output_bytes_written) => {
                     // println!("InflateDecoded: input_bytes_read: {} output_bytes_written: {}", input_bytes_read, output_bytes_written);                
                     // println!("zlibtest: in_read={}, out_written={}", input_bytes_read, output_bytes_written);
+                    total_in += input_bytes_read as u64;
                     if verbose {
                         println!("zlibtest: cycle = {}, input_bytes_read = {}, output_bytes_written = {}", cycle, input_bytes_read, output_bytes_written);
-                        println!("total_in = {}", strm.total_in);
-                        print_block(out_data.slice(0, output_bytes_written));
+                        println!("total_in = {}", total_in);
+                        if verbose_print_blocks {
+                            print_block(out_data.slice(0, output_bytes_written));
+                        }
                     }
 
                     assert!(input_bytes_read + input_pos <= input_buffer.len());
@@ -260,7 +319,6 @@ fn main() {
 
                     // Check the data that we just received against the same data in the known-good file.
                     if output_bytes_written != 0 {
-
                         if let Some(ref mut cs) = check_state {
                 	        assert!(check_buffer.len() == 0);
 
@@ -286,6 +344,8 @@ fn main() {
                             }
                         }
                     }
+
+                    total_out += output_bytes_written as u64;
                 }
 
                 InflateResult::NeedInput => {
@@ -295,6 +355,13 @@ fn main() {
             }
 
             cycle += 1;
+        }
+
+        watch.stop();
+
+        if show_perf_results {
+            // println!("elapsed ticks: {}", watch.elapsed());
+            println!("{}", watch.elapsed());
         }
     }
 }

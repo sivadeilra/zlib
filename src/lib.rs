@@ -42,7 +42,7 @@ pub enum WrapKind {
     Gzip
 }
 
-pub struct ZStream {
+struct ZStream {
     // pub next_in: uint,          // index of next input byte, within input_buffer (passed elsewhere)
     // pub avail_in: uint,         // number of bytes available at next_in
     pub total_in: u64,         // total number of input bytes read so far

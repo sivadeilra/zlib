@@ -1,5 +1,4 @@
 use std::iter::range_inclusive;
-// use super::{Code,CodeType,CODES,LENS,ENOUGH_LENS,DISTS,ENOUGH_DISTS};
 
 /* inftrees.h -- header to use inftrees.c
  * Copyright (C) 1995-2005, 2010 Mark Adler

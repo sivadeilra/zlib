@@ -6,5 +6,9 @@ authors = ["Arlie Davis <arlie.davis@gmail.com>"]
 
 build = "build.rs"
 
+[features]
+default = []
+unsafe_fast = []
+
 [dependencies.crc32]
 git = "https://github.com/sivadeilra/crc32.git"
