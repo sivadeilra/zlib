@@ -31,38 +31,38 @@ and so you can easily insert a zlib decompressor into a pipeline of `Reader`-bas
 
 The performance goals have not yet been reached.  There are several reasons for that:
 
-	* This is brand-new code.  I mean the ported code is new; obviously zlib has been
-	  around for a very long time.  But this code is new, and I have not yet begun to
-	  do any serious performance optimization.  The C-based zlib has been optimized
-	  over many years.
+* This is brand-new code.  I mean the ported code is new; obviously zlib has been
+  around for a very long time.  But this code is new, and I have not yet begun to
+  do any serious performance optimization.  The C-based zlib has been optimized
+  over many years.
 
-	* Rust does not support `goto`.  The C zlib relies heavily on `goto` to implement
-	  an efficient resumable state machine.  To port this code, I used an `enum` to
-	  simulate the `goto`-based state machine.  This causes direct jump instructions
-	  to be replaced with variable stores / loads and an indirect table-based job
-	  (if you're lucky) or an if/else ladder (if you're not lucky).  I speculate that
-	  this is the source of the main difference in performance.
+* Rust does not support `goto`.  The C zlib relies heavily on `goto` to implement
+  an efficient resumable state machine.  To port this code, I used an `enum` to
+  simulate the `goto`-based state machine.  This causes direct jump instructions
+  to be replaced with variable stores / loads and an indirect table-based job
+  (if you're lucky) or an if/else ladder (if you're not lucky).  I speculate that
+  this is the source of the main difference in performance.
 
-	* Bounds checking.  Bounds checking *can* be done efficiently, mainly by hoisting
-	  bounds checks above loops.  That is, a well-written inner loop can provide
-	  enough information to a compiler to allow the compiler to perform a single
-	  bounds check at the start of the loop, rather than checking bounds on every
-	  iteration of a loop.  (Microsoft's C# / CLR does a decent job on bounds-check
-	  elimination and hoisting, for example.)  Bounds-check elimination and hoisting
-	  in Rust/LLVM is weak to non-existent.  It is a known deficiency in Rust, and it
-	  is one that will certainly be addressed in time.  LLVM evolved to support the
-	  needs of languages that do not require bounds checks (such as C++); LLVM and
-	  Rust will need to implement existing well-known algorithsm for bounds-check
-	  elimination and hoisting in order to provide competitive performance.
+* Bounds checking.  Bounds checking *can* be done efficiently, mainly by hoisting
+  bounds checks above loops.  That is, a well-written inner loop can provide
+  enough information to a compiler to allow the compiler to perform a single
+  bounds check at the start of the loop, rather than checking bounds on every
+  iteration of a loop.  (Microsoft's C# / CLR does a decent job on bounds-check
+  elimination and hoisting, for example.)  Bounds-check elimination and hoisting
+  in Rust/LLVM is weak to non-existent.  It is a known deficiency in Rust, and it
+  is one that will certainly be addressed in time.  LLVM evolved to support the
+  needs of languages that do not require bounds checks (such as C++); LLVM and
+  Rust will need to implement existing well-known algorithsm for bounds-check
+  elimination and hoisting in order to provide competitive performance.
 
-	* Goofs on my part during the port.  It is entirely possible that I broke
-	  something that affects performance when I ported the code from C to Rust.
+* Goofs on my part during the port.  It is entirely possible that I broke
+  something that affects performance when I ported the code from C to Rust.
 
-	* Miscellaneous bad code-gen from Rust.  Rust is a new language; it will take
-	  time for Rust to reach the same level of high-quality code generation as
-	  in existing systems programming languages, such as C/C++.  I have confidence
-	  that Rust will get there.  In fact, the purpose of this experiment with
-	  porting zlib is to provide a useful piece of code for optimizing Rust *itself*.
+* Miscellaneous bad code-gen from Rust.  Rust is a new language; it will take
+  time for Rust to reach the same level of high-quality code generation as
+  in existing systems programming languages, such as C/C++.  I have confidence
+  that Rust will get there.  In fact, the purpose of this experiment with
+  porting zlib is to provide a useful piece of code for optimizing Rust *itself*.
 
 # License
 
@@ -76,26 +76,26 @@ project.
 
 This is the copyright from the original zlib README file:
 
- (C) 1995-2013 Jean-loup Gailly and Mark Adler
+     (C) 1995-2013 Jean-loup Gailly and Mark Adler
 
-  This software is provided 'as-is', without any express or implied
-  warranty.  In no event will the authors be held liable for any damages
-  arising from the use of this software.
+      This software is provided 'as-is', without any express or implied
+      warranty.  In no event will the authors be held liable for any damages
+      arising from the use of this software.
 
-  Permission is granted to anyone to use this software for any purpose,
-  including commercial applications, and to alter it and redistribute it
-  freely, subject to the following restrictions:
+      Permission is granted to anyone to use this software for any purpose,
+      including commercial applications, and to alter it and redistribute it
+      freely, subject to the following restrictions:
 
-  1. The origin of this software must not be misrepresented; you must not
-     claim that you wrote the original software. If you use this software
-     in a product, an acknowledgment in the product documentation would be
-     appreciated but is not required.
-  2. Altered source versions must be plainly marked as such, and must not be
-     misrepresented as being the original software.
-  3. This notice may not be removed or altered from any source distribution.
+      1. The origin of this software must not be misrepresented; you must not
+         claim that you wrote the original software. If you use this software
+         in a product, an acknowledgment in the product documentation would be
+         appreciated but is not required.
+      2. Altered source versions must be plainly marked as such, and must not be
+         misrepresented as being the original software.
+      3. This notice may not be removed or altered from any source distribution.
 
-  Jean-loup Gailly        Mark Adler
-  jloup@gzip.org          madler@alumni.caltech.edu
+      Jean-loup Gailly        Mark Adler
+      jloup@gzip.org          madler@alumni.caltech.edu
 
 I (the author of the Rust port) grant everyone similar rights to the Rust port
 of zlib, and I also similarly disclaim any liability for damages arising from

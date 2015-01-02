@@ -171,7 +171,7 @@ fn test_inflate_reader(input_filename: &str, check_filename: &str, in_bufsize: u
 	println!("successfully opened test files");
 
     // create an InflateReader over the input file
-    let mut inflater = InflateReader::new_gzip(in_bufsize, box input_file);
+    let mut inflater = InflateReader::new_gzip(in_bufsize, input_file);
 
     let mut output_buffer: Vec<u8> = Vec::with_capacity(out_bufsize);
     let mut check_buffer: Vec<u8> = Vec::new();
