@@ -15,4 +15,4 @@ default = []
 unsafe_fast = []
 
 [dependencies.crc32]
-git = "https://github.com/sivadeilra/crc32.git"
+crc32 = "0.0.1"
