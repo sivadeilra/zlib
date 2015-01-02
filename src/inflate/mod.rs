@@ -5,6 +5,7 @@
 // http://www.gzip.org/zlib/rfc-gzip.html
 
 use std::slice::bytes::copy_memory;
+use std::iter::repeat;
 
 use crc32::crc32;
 use adler32::adler32;
@@ -259,7 +260,7 @@ impl Inflater {
             wnext: 0,                   // window write index
             window: {
                 let mut w = Vec::with_capacity(wsize);         // allocated sliding window, if needed
-                w.grow(wsize, 0u8);
+                w.extend(repeat(0u8).take(wsize));
                 w
             },
 

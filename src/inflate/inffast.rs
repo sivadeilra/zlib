@@ -21,13 +21,13 @@ impl<'a> BufPos<'a> {
 
         /*        
         let b = if cfg!(unsafe_fast) {
-            unsafe { *self.buf.unsafe_get(self.pos) }
+            unsafe { *self.buf.get_unchecked(self.pos) }
         }
         else {
             self.buf[self.pos]
         };
         */
-        let b = unsafe { *self.buf.unsafe_get(self.pos) };
+        let b = unsafe { *self.buf.get_unchecked(self.pos) };
 
         self.pos += 1;
         b
@@ -44,7 +44,7 @@ impl<'a> BufPosMut<'a> {
     pub fn write(&mut self, b: u8) {
         if cfg!(unsafe_fast) {
             unsafe {
-                *self.buf.unsafe_mut(self.pos) = b;
+                *self.buf.get_unchecked_mut(self.pos) = b;
             }
         }
         else {
@@ -69,7 +69,7 @@ struct InputState<'a> {
 #[cfg(feature = "unsafe_fast")]
 #[inline]
 fn read_byte(s: &[u8], pos: uint) -> u8 {
-    unsafe { *s.unsafe_get(pos) }
+    unsafe { *s.get_unchecked(pos) }
 }
 
 #[cfg(not(feature = "unsafe_fast"))]
@@ -181,7 +181,7 @@ fn copy_within_output_buffer(buf: &mut [u8], dstpos: uint, srcpos: uint, len: ui
     // correct, simple, unsafe, and no faster than copy_memory()
     unsafe {
         for i in range(0, len) {
-            *buf.unsafe_mut(dstpos + i) = *buf.unsafe_get(srcpos + i);
+            *buf.unsafe_mut(dstpos + i) = *buf.get_unchecked(srcpos + i);
         }
     }
     */
@@ -268,7 +268,7 @@ pub fn inflate_fast(
                     input.load_byte();
                 }
                 // here = codes[(lcode + (input.hold & lmask) as uint) as uint]; // correct
-                here = unsafe { *(codes.as_slice()).unsafe_get((lcode + (input.hold & lmask) as uint) as uint) };
+                here = unsafe { *(codes.as_slice()).get_unchecked((lcode + (input.hold & lmask) as uint) as uint) };
                 st = InflateFastState::DoLen;
                 continue;
             }
@@ -311,7 +311,7 @@ pub fn inflate_fast(
                     }
 
                     // here = codes[dcode + (input.hold & dmask) as uint]; // safe; correct
-                    here = unsafe { *codes.as_slice().unsafe_get(dcode + (input.hold & dmask) as uint) };
+                    here = unsafe { *codes.as_slice().get_unchecked(dcode + (input.hold & dmask) as uint) };
 
                     st = InflateFastState::DoDist;
                     continue;

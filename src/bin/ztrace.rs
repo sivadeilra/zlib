@@ -5,6 +5,7 @@
 extern crate zlib;
 
 use std::io;
+use std::iter::repeat;
 use std::os;
 use std::os::set_exit_status;
 use zlib::{WINDOW_BITS_DEFAULT};
@@ -61,44 +62,6 @@ struct CheckFileState {
     reader: io::File,
 }
 
-#[link(name = "kernel32")]
-extern "stdcall" {
-    fn QueryPerformanceCounter(value: &mut u64) -> i32;
-    // fn QueryPerformanceFrequency(value: &mut u64) -> i32;
-}
-
-struct Stopwatch {
-    pub ticks_start: u64,
-    pub ticks_stop: u64,
-}
-
-impl Stopwatch {
-    pub fn new() -> Stopwatch {
-        Stopwatch {
-            ticks_start: 0,
-            ticks_stop: 0
-        }
-    }
-
-    pub fn start(&mut self) {
-        unsafe {
-            assert!(QueryPerformanceCounter(&mut self.ticks_start) != 0);
-        }
-        self.ticks_stop = 0;
-    }
-
-    pub fn stop(&mut self) {
-        unsafe {
-            assert!(QueryPerformanceCounter(&mut self.ticks_stop) != 0);
-        }
-    }
-
-    pub fn elapsed(&self) -> u64 {
-        self.ticks_stop - self.ticks_start
-    }
-}
-
-
 
 fn main() {
     let mut iter_count: uint = 1;
@@ -109,8 +72,7 @@ fn main() {
     let mut verbose = false;
     let mut verbose_print_blocks = false;
     let mut read_entire_file = false;
-    let mut show_perf_results = false;
-
+    
     let arg_prefix = "-";
 
     let args = os::args();
@@ -143,9 +105,6 @@ fn main() {
                 }
                 "vv" => {
                     verbose_print_blocks = true;
-                }
-                "p" => {
-                    show_perf_results = true;
                 }
                 "c" => {
                     if check_filename == None {
@@ -225,14 +184,12 @@ fn main() {
 
     // Allocate output buffer
     let mut output_buffer: Vec<u8> = Vec::with_capacity(output_buffer_size);
-    output_buffer.grow(output_buffer_size, 0);
+    output_buffer.extend(repeat(0).take(output_buffer_size));
 
     let out_data = output_buffer.as_mut_slice();
 
     let mut state = Inflater::new_gzip();
     let mut cycle: uint = 0;
-
-    let mut watch = Stopwatch::new();
 
     for iter in range(0, iter_count) {
         if verbose {
@@ -253,8 +210,6 @@ fn main() {
         let mut total_out: u64 = 0;
 
         let mut input_pos: uint = 0;
-
-        watch.start();
 
         loop {
             if verbose {
@@ -355,12 +310,6 @@ fn main() {
             }
 
             cycle += 1;
-        }
-
-        watch.stop();
-
-        if show_perf_results {
-            println!("{:20}  {:20}  {:20}", watch.elapsed(), state.counter_mainloop, state.counter_inffast);
         }
     }
 }

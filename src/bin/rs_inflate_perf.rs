@@ -5,6 +5,7 @@
 extern crate zlib;
 
 use std::io;
+use std::iter::repeat;
 use std::os;
 use zlib::WINDOW_BITS_DEFAULT;
 use zlib::inflate::{Inflater,InflateResult};
@@ -36,7 +37,7 @@ fn main()
     println!("read {} bytes", input_data.len());
 
     let mut output_buffer: Vec<u8> = Vec::with_capacity(out_bufsize);
-    output_buffer.grow(out_bufsize, 0);
+    output_buffer.extend(repeat(0).take(out_bufsize));
 
     let out_data = output_buffer.as_mut_slice();
 
