@@ -240,9 +240,11 @@ impl Inflater {
     fn internal_new(window_bits: uint, wrap: u32) -> Inflater {
         assert!(window_bits >= WINDOW_BITS_MIN && window_bits <= WINDOW_BITS_MAX);
 
+        debug!("internal_new: wrap={}", wrap);
+
         let wsize: uint = 1 << window_bits;
 
-        Inflater {
+        let mut inflater = Inflater {
             mode: InflateMode::HEAD,
             last: false,
             wrap: wrap,                 // bit 0 true for zlib, bit 1 true for gzip
@@ -297,7 +299,10 @@ impl Inflater {
 
             counter_mainloop: 0,
             counter_inffast: 0
-        }
+        };
+
+        inflater.reset2(window_bits as int);
+        inflater
     }
 
     // Resets the state of the decoder, without changing the contents of the window.
@@ -903,6 +908,7 @@ impl Inflater {
                 let len = loc.hold & 0xffff;
                 let invlen = (loc.hold >> 16) ^ 0xffff;
                 if len != invlen {
+                    warn!("invalid stored block lengths;  hold=0x{:08x}  len=0x{:04x}  invlen=0x{:04x}", loc.hold, len, invlen);
                     BADINPUT!(loc, "invalid stored block lengths");
                 }
                 debug!("inflate:       stored length {}", len);
