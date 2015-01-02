@@ -6,6 +6,10 @@ authors = ["Arlie Davis <arlie.davis@gmail.com>"]
 
 build = "build.rs"
 
+readme = "README.md"
+license = "MIT"
+description = "An (incomplete) port of zlib to Rust.  The decompressor works, but the compressor has not yet been ported."
+
 [features]
 default = []
 unsafe_fast = []
