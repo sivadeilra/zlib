@@ -1,7 +1,7 @@
 [package]
 
 name = "zlib"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Arlie Davis <arlie.davis@gmail.com>"]
 
 build = "build.rs"
@@ -15,4 +15,4 @@ default = []
 unsafe_fast = []
 
 [dependencies.crc32]
-crc32 = "0.0.1"
+crc32 = "0.0.2"

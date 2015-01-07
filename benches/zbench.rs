@@ -10,6 +10,7 @@ extern crate test;
 extern crate zlib;
 
 use std::io;
+use std::iter::repeat;
 use std::os;
 use std::os::set_exit_status;
 use std::io::IoErrorKind;
@@ -50,7 +51,7 @@ fn run_zbench(
 
     // Allocate output buffer
     let mut output_buffer: Vec<u8> = Vec::with_capacity(output_buffer_size);
-    output_buffer.grow(output_buffer_size, 0);
+    output_buffer.extend(repeat(0).take(output_buffer_size));
 
     let out_data = output_buffer.as_mut_slice();
 
