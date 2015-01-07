@@ -187,7 +187,7 @@ fn copy_within_output_buffer(buf: &mut [u8], dstpos: uint, srcpos: uint, len: ui
     */
 }
 
-#[deriving(Show,PartialEq)]
+#[derive(Show,PartialEq)]
 enum InflateFastState {
     Start,
     DoDist,

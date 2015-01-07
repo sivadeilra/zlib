@@ -52,7 +52,7 @@ macro_rules! PULLBYTE {
                 return;
             }
             let b = $loc.input_buffer[$loc.next];
-            $loc.hold += b as u32 << $loc.bits;
+            $loc.hold += (b as u32) << $loc.bits;
             $loc.next += 1;
             $loc.bits += 8;
         }
@@ -73,7 +73,7 @@ macro_rules! NEEDBITS {
 }
 
 /// Describes the results of calling `inflate()`.
-#[deriving(Copy)]
+#[derive(Copy)]
 pub enum InflateResult
 {
     Eof(u32),               // input data stream has reached its end; value is crc32 of stream
@@ -92,7 +92,7 @@ pub enum InflateResult
 // */
 
 /* Possible inflate modes between inflate() calls */
-#[deriving(Show,Copy,PartialEq,Eq)]
+#[derive(Show,Copy,PartialEq,Eq)]
 enum InflateMode {
     HEAD,       // i: waiting for magic header
     FLAGS,      // i: waiting for method and flags (gzip)
@@ -207,9 +207,9 @@ pub struct Inflater // was inflate_state
     ndist: uint,                // number of distance code lengths
     have: uint,                 // number of code lengths in lens[]
     next: uint,                 // next available space in codes[]
-    lens: [u16, ..320],         // temporary storage for code lengths
-    work: [u16, ..288],         // work area for code table building
-    codes: [Code, ..ENOUGH],    // space for code tables
+    lens: [u16; 320],           // temporary storage for code lengths
+    work: [u16; 288],           // work area for code table building
+    codes: [Code; ENOUGH],      // space for code tables
     sane: bool,                 // if false, allow invalid distance too far
     back: uint,                 // bits back of last unprocessed length/lit
     was: uint,                  // initial length of match
@@ -289,9 +289,9 @@ impl Inflater {
             ndist: 0,                   // number of distance code lengths
             have: 0,                    // number of code lengths in lens[]
             next: 0,                    // next available space in codes[]   // index into codes[]
-            lens: [0u16, ..320],        // temporary storage for code lengths
-            work: [0u16, ..288],        // work area for code table building
-            codes: [Default::default(), ..ENOUGH],    // space for code tables
+            lens: [0u16; 320],          // temporary storage for code lengths
+            work: [0u16; 288],          // work area for code table building
+            codes: [Default::default(); ENOUGH],    // space for code tables
             sane: false,                // if false, allow invalid distance too far
             back: 0,                    // bits back of last unprocessed length/lit
             was: 0,                     // initial length of match
@@ -494,7 +494,7 @@ impl Inflater {
         let mut len: uint;          // length to copy for repeats, bits to drop
         let mut ret: uint;          // return code
 
-        static ORDER: [u16, ..19] = /* permutation of code lengths */
+        static ORDER: [u16; 19] = /* permutation of code lengths */
             [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
         match loc.state.mode {
@@ -555,7 +555,7 @@ impl Inflater {
     // #else
     //             if (
     // #endif
-                    (((bits(loc, 8) as u32 << 8) + (loc.hold >> 8)) % 31) != 0 {
+                    ((((bits(loc, 8) as u32) << 8) + (loc.hold >> 8)) % 31) != 0 {
                     warn!("incorrect header check.  bits(8) = 0x{:2x}", bits(loc, 8));
                     BADINPUT!(loc, "incorrect header check");
                 }
@@ -1562,7 +1562,7 @@ fn update(flags: u32, check: u32, data: &[u8]) -> u32
 // The bits are packed in "little-endian" form; byte[0] is in bits [0..7],
 // while byte[1] is in bits [8..15].
 fn crc2(check: u32, word: u32) -> u32 {
-    let mut hbuf :[u8, ..2] = [0, ..2];
+    let mut hbuf :[u8; 2] = [0; 2];
     hbuf[0] = (word & 0xff) as u8;
     hbuf[1] = ((word >> 8) & 0xff) as u8;
     return crc32(check, &hbuf);
@@ -1572,7 +1572,7 @@ fn crc2(check: u32, word: u32) -> u32 {
 // The bits are packed in "little-endian" form; byte[0] is in bits [0..7],
 // while byte[1] is in bits [8..15], etc.
 fn crc4(check: u32, word: u32) -> u32 {
-    let mut hbuf = [0u8, ..4];
+    let mut hbuf = [0u8; 4];
     hbuf[0] = (word & 0xff) as u8;
     hbuf[1] = ((word >> 8) & 0xff) as u8;
     hbuf[2] = ((word >> 16) & 0xff) as u8;

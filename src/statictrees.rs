@@ -1,7 +1,7 @@
 // DO NOT EDIT -- THIS IS A GENERATED SOURCE FILE
 // source file created automatically by treegencode.rs
 
-pub static STATIC_LTREE_LENGTHS :[u8, ..288] = [
+pub static STATIC_LTREE_LENGTHS :[u8; 288] = [
    8,   8,   8,   8,   8,   8,   8,   8,   8,   8,
    8,   8,   8,   8,   8,   8,   8,   8,   8,   8,
    8,   8,   8,   8,   8,   8,   8,   8,   8,   8,
@@ -33,7 +33,7 @@ pub static STATIC_LTREE_LENGTHS :[u8, ..288] = [
    8,   8,   8,   8,   8,   8,   8,   8
 ];
 
-pub static STATIC_LTREE_CODES :[u16, ..288] = [
+pub static STATIC_LTREE_CODES :[u16; 288] = [
   12, 140,  76, 204,  44, 172, 108, 236,  28, 156,
   92, 220,  60, 188, 124, 252,   2, 130,  66, 194,
   34, 162,  98, 226,  18, 146,  82, 210,  50, 178,
@@ -65,19 +65,19 @@ pub static STATIC_LTREE_CODES :[u16, ..288] = [
    3, 131,  67, 195,  35, 163,  99, 227
 ];
 
-pub static STATIC_DTREE_LENGTHS :[u8, ..30] = [
+pub static STATIC_DTREE_LENGTHS :[u8; 30] = [
    5,   5,   5,   5,   5,   5,   5,   5,   5,   5,
    5,   5,   5,   5,   5,   5,   5,   5,   5,   5,
    5,   5,   5,   5,   5,   5,   5,   5,   5,   5
 ];
 
-pub static STATIC_DTREE_CODES :[u16, ..30] = [
+pub static STATIC_DTREE_CODES :[u16; 30] = [
    0,  16,   8,  24,   4,  20,  12,  28,   2,  18,
   10,  26,   6,  22,  14,  30,   1,  17,   9,  25,
    5,  21,  13,  29,   3,  19,  11,  27,   7,  23
 ];
 
-pub static DIST_CODE :[u8, ..512] = [
+pub static DIST_CODE :[u8; 512] = [
    0,   1,   2,   3,   4,   4,   5,   5,   6,   6,
    6,   6,   7,   7,   7,   7,   8,   8,   8,   8,
    8,   8,   8,   8,   9,   9,   9,   9,   9,   9,
@@ -132,7 +132,7 @@ pub static DIST_CODE :[u8, ..512] = [
    0,   0
 ];
 
-pub static LENGTH_CODE :[u8, ..256] = [
+pub static LENGTH_CODE :[u8; 256] = [
    0,   1,   2,   3,   4,   5,   6,   7,   8,   8,
    9,   9,  10,  10,  11,  11,  12,  12,  12,  12,
   13,  13,  13,  13,  14,  14,  14,  14,  15,  15,
@@ -161,13 +161,13 @@ pub static LENGTH_CODE :[u8, ..256] = [
   27,  27,  27,  27,  27,  28
 ];
 
-pub static BASE_LENGTH :[u8, ..29] = [
+pub static BASE_LENGTH :[u8; 29] = [
    0,   1,   2,   3,   4,   5,   6,   7,   8,  10,
   12,  14,  16,  20,  24,  28,  32,  40,  48,  56,
   64,  80,  96, 112, 128, 160, 192, 224,   0
 ];
 
-pub static BASE_DIST :[u16, ..30] = [
+pub static BASE_DIST :[u16; 30] = [
    0,   1,   2,   3,   4,   6,   8,  12,  16,  24,
   32,  48,  64,  96, 128, 192, 256, 384, 512, 768,
 1024,1536,2048,3072,4096,6144,8192,12288,16384,24576

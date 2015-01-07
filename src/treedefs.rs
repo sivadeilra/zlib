@@ -39,22 +39,20 @@ pub const MAX_MATCH :uint = 258;
 pub const MAX_BITS :uint = 15;
 /* All codes must not exceed MAX_BITS bits */
 
-pub static EXTRA_LBITS: [u8, ..LENGTH_CODES] /* extra bits for each length code */
+pub static EXTRA_LBITS: [u8; LENGTH_CODES] /* extra bits for each length code */
    = [0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
 
-pub static EXTRA_DBITS: [u8, ..D_CODES] /* extra bits for each distance code */
+pub static EXTRA_DBITS: [u8; D_CODES] /* extra bits for each distance code */
    = [0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
 
-pub static EXTRA_BLBITS: [u8, ..BL_CODES]/* extra bits for each bit length code */
+pub static EXTRA_BLBITS: [u8; BL_CODES]/* extra bits for each bit length code */
    = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,3,7];
 
-pub static BL_ORDER: [u8, ..BL_CODES]
+pub static BL_ORDER: [u8; BL_CODES]
    = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
 /* The lengths of the bit length codes are sent in order of decreasing
  * probability, to avoid transmitting the lengths for unused bit length codes.
  */
-
-
 
 /* Data structure describing a single value and its code string. */
 pub struct CtData // was ct_data

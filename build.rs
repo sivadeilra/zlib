@@ -28,14 +28,11 @@ use inftrees::{Code, LENS, DISTS, inflate_table};
  */
 
 fn makefixed(w: &mut Writer) {
-    let mut fixed: [Code, ..544] = [Default::default(); 544];
-    let mut work: [u16, ..288] = [Default::default(); 288];         // work area for code table building
+    let mut fixed: [Code; 544] = [Default::default(); 544];
+    let mut work: [u16; 288] = [Default::default(); 288];         // work area for code table building
 
     // build fixed huffman tables
-
-    let mut lens: [u16, ..320] = [Default::default(); 320];         // temporary storage for code lengths
-
-    // let mut next: uint = 0;
+    let mut lens: [u16; 320] = [Default::default(); 320];         // temporary storage for code lengths
 
     /* literal/length table */
     {

@@ -135,30 +135,30 @@ struct DeflateState {
 
                 /* used by trees.c: */
     /* Didn't use ct_data typedef below to suppress compiler warning */
-    dyn_ltree_fc: [u16, ..HEAP_SIZE],   /* literal and length tree */
-    dyn_ltree_dl: [u16, ..HEAP_SIZE],
+    dyn_ltree_fc: [u16; HEAP_SIZE],   /* literal and length tree */
+    dyn_ltree_dl: [u16; HEAP_SIZE],
 
-    dyn_dtree_fc: [u16, ..2*D_CODES+1], /* distance tree */
-    dyn_dtree_dl: [u16, ..2*D_CODES+1], /* distance tree */
+    dyn_dtree_fc: [u16; 2*D_CODES+1], /* distance tree */
+    dyn_dtree_dl: [u16; 2*D_CODES+1], /* distance tree */
 
-    bl_tree_fc: [u16, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
-    bl_tree_dl: [u16, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
+    bl_tree_fc: [u16; 2*BL_CODES+1],  /* Huffman tree for bit lengths */
+    bl_tree_dl: [u16; 2*BL_CODES+1],  /* Huffman tree for bit lengths */
 
     l_desc: TreeDesc,               /* desc. for literal tree */
     d_desc: TreeDesc,               /* desc. for distance tree */
     bl_desc: TreeDesc,              /* desc. for bit length tree */
 
-    bl_count: [u16, ..MAX_BITS+1],
+    bl_count: [u16; MAX_BITS+1],
     /* number of codes at each bit length for an optimal tree */
 
-    heap: [int, ..2*L_CODES+1],      /* heap used to build the Huffman trees */
+    heap: [int; 2*L_CODES+1],      /* heap used to build the Huffman trees */
     heap_len: uint,               /* number of elements in the heap */
     heap_max: uint,               /* element of largest frequency */
     // The sons of heap[n] are heap[2*n] and heap[2*n+1]. heap[0] is not used.
     // The same heap array is used to build all trees.
 
     /// Depth of each subtree used as tie breaker for trees of equal frequency
-    depth: [u8, ..2*L_CODES+1],
+    depth: [u8; 2*L_CODES+1],
 
     l_buf: Vec<u8>,          /* buffer for literals or lengths */
 
@@ -322,12 +322,12 @@ impl DeflateState {
             strategy: 0,
             good_match: 0,
             nice_match: 0,
-            dyn_ltree_fc:  [0, ..HEAP_SIZE],   /* literal and length tree */
-            dyn_ltree_dl:  [0, ..HEAP_SIZE],   /* literal and length tree */
-            dyn_dtree_fc:  [0, ..2*D_CODES+1], /* distance tree */
-            dyn_dtree_dl:  [0, ..2*D_CODES+1], /* distance tree */
-            bl_tree_fc  :  [0, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
-            bl_tree_dl  :  [0, ..2*BL_CODES+1],  /* Huffman tree for bit lengths */
+            dyn_ltree_fc:  [0; HEAP_SIZE],   /* literal and length tree */
+            dyn_ltree_dl:  [0; HEAP_SIZE],   /* literal and length tree */
+            dyn_dtree_fc:  [0; 2*D_CODES+1], /* distance tree */
+            dyn_dtree_dl:  [0; 2*D_CODES+1], /* distance tree */
+            bl_tree_fc  :  [0; 2*BL_CODES+1],  /* Huffman tree for bit lengths */
+            bl_tree_dl  :  [0; 2*BL_CODES+1],  /* Huffman tree for bit lengths */
 
             l_desc: TreeDesc::new(StaticTreeDesc {
                 lengths: &STATIC_LTREE_LENGTHS,
@@ -356,13 +356,13 @@ impl DeflateState {
                 max_length: MAX_BL_BITS
             }),
 
-            bl_count: [0u16, ..MAX_BITS+1],
+            bl_count: [0u16; MAX_BITS+1],
 
-            heap: [0, ..2*L_CODES+1],
+            heap: [0; 2*L_CODES+1],
             heap_len: 0,
             heap_max: 0,
 
-            depth: [0u8, ..2*L_CODES+1],
+            depth: [0u8; 2*L_CODES+1],
 
             l_buf: Vec::new(),
 
@@ -456,7 +456,7 @@ struct TreeDesc {
     stat_desc: StaticTreeDesc, /* the corresponding static tree */
 }
 
-#[deriving(Copy)]
+#[derive(Copy)]
 struct TreeRef {
     pub codes: &'static [u16],
     pub lengths: &'static [u8],

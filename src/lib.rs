@@ -35,7 +35,7 @@ pub const WINDOW_BITS_MIN: uint = 8;
 pub const WINDOW_BITS_MAX: uint = 15;
 pub const WINDOW_BITS_DEFAULT: uint = WINDOW_BITS_MAX;
 
-#[deriving(Copy,Show,Eq,PartialEq)]
+#[derive(Copy,Show,Eq,PartialEq)]
 pub enum WrapKind {
     Zlib,
     Gzip
@@ -98,7 +98,7 @@ impl GZipHeader {
 /* constants */
 
 /* Allowed flush values; see deflate() and inflate() below for details */
-#[deriving(Copy,Show,PartialEq,Eq)]
+#[derive(Copy,Show,PartialEq,Eq)]
 pub enum Flush {
     None = 0,
     PartialFlush = 1,
@@ -119,7 +119,7 @@ pub const Z_BLOCK        : u32 = 5;
 pub const Z_TREES        : u32 = 6;
 */
 
-#[deriving(Copy,PartialEq,Eq)]
+#[derive(Copy,PartialEq,Eq)]
 pub enum ZERR {
     Ok              = 0,        // Z_OK            = 0,
     StreamEnd       = 1,        // Z_STREAM_END    = 1,

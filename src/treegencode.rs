@@ -11,7 +11,7 @@ mod treedefs;
 
 fn write_array<T : core::fmt::Show>(s :&mut String, columns :uint, data :&[T], name: &str, dtype: &str)
 {
-    s.push_str(format!("pub static {} :[{}, ..{}] = [\n", name, dtype, data.len()).as_slice());
+    s.push_str(format!("pub static {} :[{}; {}] = [\n", name, dtype, data.len()).as_slice());
     for i in range(0, data.len()) {
         s.push_str(format!("{:4}", data[i]).as_slice());
         let last = i == data.len() - 1;
@@ -26,8 +26,7 @@ fn write_array<T : core::fmt::Show>(s :&mut String, columns :uint, data :&[T], n
 }
 
 
-fn gen_trees_header() -> String
-{
+fn gen_trees_header() -> String {
     let st = tr_static_init();
 
     let mut s :String = String::new();

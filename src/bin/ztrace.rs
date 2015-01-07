@@ -28,7 +28,7 @@ macro_rules! get_int_arg {
     ($arg:expr, $valopt:expr, $min:expr) => {
         {
             if let Some(aval) = $valopt {
-                let value: uint = if let Some(value) = from_str(aval) { value } else {
+                let value: uint = if let Some(value) = aval.parse::<uint>() { value } else {
                     println!("arg '{}' is invalid: value is not a valid number", $arg);
                     set_exit_status(1);
                     return;

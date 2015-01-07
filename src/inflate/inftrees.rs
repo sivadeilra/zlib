@@ -23,7 +23,7 @@ use std::iter::range_inclusive;
 // of the bit buffer.  val is the actual byte to output in the case
 // of a literal, the base length or distance, or the offset from
 // the current table to the next table.  Each entry is four bytes.
-#[deriving(Copy,Default)]
+#[derive(Copy,Default)]
 pub struct Code {
     // operation, extra bits, table bits
     // op values as set by inflate_table():
@@ -103,17 +103,17 @@ pub fn inflate_table(
     -> (int /*error*/, uint /*bits*/)
 {
     // debug!("inflate_table: ctype {}, codes {}, bits {}", ctype as u32, codes, bits);
-    static LBASE :[u16, ..31] = [ /* Length codes 257..285 base */
+    static LBASE :[u16; 31] = [ /* Length codes 257..285 base */
         3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
         35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258, 0, 0];
-    static LEXT :[u16, ..31] = [ /* Length codes 257..285 extra */
+    static LEXT :[u16; 31] = [ /* Length codes 257..285 extra */
         16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 18, 18, 18, 18,
         19, 19, 19, 19, 20, 20, 20, 20, 21, 21, 21, 21, 16, 72, 78 ];
-    static DBASE :[u16, ..32] = [ /* Distance codes 0..29 base */
+    static DBASE :[u16; 32] = [ /* Distance codes 0..29 base */
         1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193,
         257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145,
         8193, 12289, 16385, 24577, 0, 0 ];
-    static DEXT :[u16, ..32] = [ /* Distance codes 0..29 extra */
+    static DEXT :[u16; 32] = [ /* Distance codes 0..29 extra */
         16, 16, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22,
         23, 23, 24, 24, 25, 25, 26, 26, 27, 27,
         28, 28, 29, 29, 64, 64 ];
@@ -150,7 +150,7 @@ pub fn inflate_table(
      */
 
     // accumulate lengths for codes (assumes lens[] all in 0..MAXBITS)
-    let mut count = [0u16, ..MAXBITS+1]; // number of codes of each length
+    let mut count = [0u16; MAXBITS+1]; // number of codes of each length
     for sym in range(0, codes) {
         count[lens[sym] as uint] += 1;
     }
@@ -215,7 +215,7 @@ pub fn inflate_table(
     }
 
     // generate offsets into symbol table for each length for sorting
-    let mut offs = [0u16, ..MAXBITS+1];     // offsets in table for each length
+    let mut offs = [0u16; MAXBITS+1];     // offsets in table for each length
     offs[1] = 0;
     for len in range(1, MAXBITS) {
         offs[len + 1] = offs[len] + count[len];
@@ -260,7 +260,7 @@ pub fn inflate_table(
     // routine permits incomplete codes, so another loop after this one fills
     // in the rest of the decoding tables with invalid code markers.
 
-    static EMPTY_U16: [u16, ..0] = [];
+    static EMPTY_U16: [u16; 0] = [];
 
     let (base,              // base value table to use
         base_bias,          // offset into 'base' to use, can be negative

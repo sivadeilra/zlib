@@ -3,6 +3,7 @@
 extern crate zlib;
 
 use std::io;
+use std::iter::repeat;
 use std::fmt::Show;
 use std::os;
 use zlib::{WINDOW_BITS_DEFAULT};
@@ -63,7 +64,7 @@ fn test_inflate(in_bufsize: uint, out_bufsize: uint)
 
     let mut input_buffer: Vec<u8> = Vec::with_capacity(in_bufsize);
     let mut output_buffer: Vec<u8> = Vec::with_capacity(out_bufsize);
-    output_buffer.grow(out_bufsize, 0);
+    output_buffer.extend(repeat(0).take(out_bufsize));
     let mut check_buffer: Vec<u8> = Vec::new();
 
     let mut input_pos: uint = 0; // index of next byte in input_buffer to read
