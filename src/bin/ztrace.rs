@@ -1,6 +1,5 @@
 #![allow(unused_imports)]
 #![allow(unused_mut)]
-#![feature(macro_rules)]
 
 extern crate zlib;
 

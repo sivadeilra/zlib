@@ -42,7 +42,7 @@ macro_rules! BADINPUT {
     }
 }
 
-// Get a byte of input into the bit accumulator, or return from inflat
+// Get a byte of input into the bit accumulator, or return from inflate
 // if there is no input available.
 macro_rules! PULLBYTE {
     ($loc:expr) => {
@@ -240,11 +240,9 @@ impl Inflater {
     fn internal_new(window_bits: uint, wrap: u32) -> Inflater {
         assert!(window_bits >= WINDOW_BITS_MIN && window_bits <= WINDOW_BITS_MAX);
 
-        debug!("internal_new: wrap={}", wrap);
-
         let wsize: uint = 1 << window_bits;
 
-        let mut inflater = Inflater {
+        Inflater {
             mode: InflateMode::HEAD,
             last: false,
             wrap: wrap,                 // bit 0 true for zlib, bit 1 true for gzip
@@ -299,10 +297,7 @@ impl Inflater {
 
             counter_mainloop: 0,
             counter_inffast: 0
-        };
-
-        inflater.reset2(window_bits as int);
-        inflater
+        }
     }
 
     // Resets the state of the decoder, without changing the contents of the window.
@@ -342,39 +337,6 @@ impl Inflater {
         self.whave = 0;
         self.wnext = 0;
         self.reset_keep();
-    }
-
-    fn reset2(&mut self, window_bits: int) {
-        let wrap: u32;
-        let mut wbits = window_bits;
-
-        // extract wrap request from windowBits parameter
-        if window_bits < 0 {
-            wrap = 0;
-            wbits = -wbits;
-        }
-        else {
-            wrap = (wbits as u32 >> 4) + 1;
-    // #ifdef GUNZIP
-            if wbits < 48 {
-                wbits &= 15;
-            }
-    // #endif
-        }
-
-        // set number of window bits, free window if different
-        if wbits != 0 && (wbits < 8 || wbits > 15) {
-            panic!("Z_STREAM_ERROR");
-        }
-
-        if self.window.len() != 0 && self.wbits != wbits as uint {
-            self.window.clear();
-        }
-
-        // update state and reset the rest of it
-        self.wrap = wrap;
-        self.wbits = wbits as uint;
-        self.reset();
     }
 
     pub fn prime(&mut self, bits: int, value: u32) {
