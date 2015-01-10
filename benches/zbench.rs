@@ -1,9 +1,9 @@
 #![allow(unused_imports)]
 #![allow(unused_mut)]
-#![feature(macro_rules)]
-#![feature(phase)]
+#![feature(plugin)]
 
-#[phase(plugin, link)]
+#[plugin]
+#[macro_use]
 extern crate log;
 
 extern crate test;

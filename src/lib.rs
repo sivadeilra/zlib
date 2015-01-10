@@ -1,10 +1,10 @@
-#![feature(globs)]
-#![feature(macro_rules)]
+#![feature(plugin)]
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-#![feature(phase)]
-#[phase(plugin, link)] extern crate log;
+#[plugin]
+#[macro_use]
+extern crate log;
 
 extern crate crc32;
 

@@ -1,7 +1,8 @@
 #![allow(dead_code)]
+#![feature(plugin)]
 
-#![feature(phase)]
-#[phase(plugin, link)]
+#[plugin]
+#[macro_use]
 extern crate log;
 
 use std::default::Default;
