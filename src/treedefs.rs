@@ -5,9 +5,9 @@ pub struct StaticTreeDesc
     pub codes :&'static [u16],
 
     pub extra_bits :&'static [u8],      /* extra bits for each code or NULL */
-    pub extra_base :uint,          /* base index for extra_bits */
-    pub elems :uint,               /* max number of elements in the tree */
-    pub max_length :uint,         /* max bit length for the codes */
+    pub extra_base :usize,          /* base index for extra_bits */
+    pub elems :usize,               /* max number of elements in the tree */
+    pub max_length :usize,         /* max bit length for the codes */
 }
 
 // This contains definitions for the ZLIB static trees.
@@ -15,28 +15,28 @@ pub struct StaticTreeDesc
 // so that we can compile both the ZLIB library and the tool
 // which generates the static tree tables.
 
-pub const LENGTH_CODES :uint = 29;
+pub const LENGTH_CODES :usize = 29;
 /* number of length codes, not counting the special END_BLOCK code */
 
-pub const LITERALS :uint = 256;
+pub const LITERALS :usize = 256;
 /* number of literal bytes 0..255 */
 
-pub const L_CODES :uint = LITERALS + 1 + LENGTH_CODES;
+pub const L_CODES :usize = LITERALS + 1 + LENGTH_CODES;
 /* number of Literal or Length codes, including the END_BLOCK code */
 
-pub const D_CODES :uint = 30;
+pub const D_CODES :usize = 30;
 /* number of distance codes */
 
-pub const BL_CODES :uint = 19;
+pub const BL_CODES :usize = 19;
 /* number of codes used to transfer the bit lengths */
 
-pub const DIST_CODE_LEN :uint = 512; /* see definition of array dist_code below */
+pub const DIST_CODE_LEN :usize = 512; /* see definition of array dist_code below */
 
-pub const MIN_MATCH :uint = 3;
-pub const MAX_MATCH :uint = 258;
+pub const MIN_MATCH :usize = 3;
+pub const MAX_MATCH :usize = 258;
 /* The minimum and maximum match lengths */
 
-pub const MAX_BITS :uint = 15;
+pub const MAX_BITS :usize = 15;
 /* All codes must not exceed MAX_BITS bits */
 
 pub static EXTRA_LBITS: [u8; LENGTH_CODES] /* extra bits for each length code */

@@ -37,32 +37,32 @@ fn makefixed(w: &mut Writer) {
 
     /* literal/length table */
     {
-        let mut sym :uint = 0;
+        let mut sym :usize = 0;
         while sym < 144 { lens[sym] = 8; sym += 1; }
         while sym < 256 { lens[sym] = 9; sym += 1; }
         while sym < 280 { lens[sym] = 7; sym += 1; }
         while sym < 288 { lens[sym] = 8; sym += 1; }
     }
 
-    let mut next :uint = 0;     // index into 'fixed' table
-    let lenfix: uint = 0;       // index into 'fixed' table
+    let mut next :usize = 0;     // index into 'fixed' table
+    let lenfix: usize = 0;       // index into 'fixed' table
     let (err, _) = inflate_table(LENS, &lens, 288, &mut fixed, &mut next, 9, work.as_mut_slice());
     assert!(err == 0);
 
     /* distance table */
     {
-        let mut sym :uint = 0;
+        let mut sym :usize = 0;
         while sym < 32 { lens[sym] = 5; sym += 1; }
     }
-    let distfix: uint = next;      // index into 'fixed' table
+    let distfix: usize = next;      // index into 'fixed' table
 
     let (err, _) = inflate_table(DISTS, &lens, 32, &mut fixed, &mut next, 5, work.as_mut_slice());
     assert!(err == 0);
 
     let lencode = fixed.slice_from(lenfix);
-    // let lenbits: uint = 9;
+    // let lenbits: usize = 9;
     let distcode = fixed.slice_from(distfix);
-    // let distbits: uint = 5;
+    // let distbits: usize = 5;
 
     w.write_str("
 // WARNING -- GENERATED CODE -- DO NOT EDIT

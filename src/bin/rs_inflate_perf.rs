@@ -1,22 +1,14 @@
-#![allow(unused_imports)]
-#![allow(unused_mut)]
-#![allow(dead_code)]
+#![allow(unstable)]
 
 extern crate zlib;
 
 use std::io;
 use std::iter::repeat;
 use std::os;
-use zlib::WINDOW_BITS_DEFAULT;
 use zlib::inflate::{Inflater,InflateResult};
-use zlib::inflate::InflateReader;
-use std::io::IoErrorKind;
-use std::io::IoError;
-use std::cmp::min;
 
-fn main()
-{
-    let out_bufsize: uint = 1 << 20; // fails at 0x10000
+fn main() {
+    let out_bufsize: usize = 1 << 20; // fails at 0x10000
 
     let args = os::args();
 
@@ -43,16 +35,16 @@ fn main()
 
     let mut state = Inflater::new_gzip();
 
-    let iter_count: uint = 100;
+    let iter_count: usize = 100;
 
     let input_slice = input_data.as_slice();
 
-    for iter in range(0, iter_count) {
+    for iter in (0..iter_count) {
 
         state.reset();
-        let mut inpos: uint = 0; // position within input_data
+        let mut inpos: usize = 0; // position within input_data
 
-        let mut cycle: uint = 0;
+        let mut cycle: usize = 0;
 
         // Main loop
         loop {
@@ -87,30 +79,5 @@ fn main()
         }
 
         println!("iteration #{} done.", iter);
-    }
-}
-
-fn print_block(data: &[u8]) {
-    let mut s = String::new();
-
-    let width = 32;
-
-    static HEX: [char; 0x10] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' ];
-
-    println!("print_block: len={}", data.len());
-
-    for i in range(0, data.len()) {
-        let b = data[i];
-        s.push(' ');
-        s.push(HEX[(b >> 4) as uint]);
-        s.push(HEX[(b & 0xf) as uint]);
-        if ((i + 1) % width) == 0 {
-            println!("{}", s);
-            s.clear();
-        }
-    }
-
-    if (data.len() % width) != 0 {
-        println!("{}", s);
     }
 }

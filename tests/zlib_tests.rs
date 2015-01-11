@@ -12,45 +12,39 @@ use zlib::inflate::InflateReader;
 use std::io::IoErrorKind;
 use std::io::IoError;
 
-const INBUF_SIZE :uint = 0x1000;
-const OUTBUF_SIZE :uint = 0x1000;
+const INBUF_SIZE :usize = 0x1000;
+const OUTBUF_SIZE :usize = 0x1000;
 
-fn unwrap_or_warn<T,E:Show>(op: Result<T,E>) -> T
-{
+fn unwrap_or_warn<T,E:Show>(op: Result<T,E>) -> T {
 	match op {
 		Ok(val) => val,
 		Err(err) => {
-			panic!("Failed to open an input file.  Make sure you run this from the root of the 'zlib' dir.  {}", err);
+			panic!("Failed to open an input file.  Make sure you run this from the root of the 'zlib' dir.  {:?}", err);
 		}
 	}
 }
 
 #[test]
-fn test_inflate_large_bufs() 
-{
+fn test_inflate_large_bufs() {
 	test_inflate(0x10000, 0x10000); // 64 KB
 }
 
 #[test]
-fn test_inflate_tiny_bufs()
-{
+fn test_inflate_tiny_bufs() {
 	test_inflate(0x40, 0x40); // 64 bytes
 }
 
 #[test]
-fn test_tiny_inbuf_large_outbuf()
-{
+fn test_tiny_inbuf_large_outbuf() {
 	test_inflate(0x40, 0x10000);
 }
 
 #[test]
-fn test_large_inbuf_tiny_outbuf()
-{
+fn test_large_inbuf_tiny_outbuf() {
 	test_inflate(0x40, 0x10000);
 }
 
-fn test_inflate(in_bufsize: uint, out_bufsize: uint)
-{
+fn test_inflate(in_bufsize: usize, out_bufsize: usize) {
     let input_path = Path::new("zlib-1.2.8.tar.gz");
     let check_path = Path::new("zlib-1.2.8.tar");			// contains the expected (good) output
 
@@ -67,13 +61,13 @@ fn test_inflate(in_bufsize: uint, out_bufsize: uint)
     output_buffer.extend(repeat(0).take(out_bufsize));
     let mut check_buffer: Vec<u8> = Vec::new();
 
-    let mut input_pos: uint = 0; // index of next byte in input_buffer to read
+    let mut input_pos: usize = 0; // index of next byte in input_buffer to read
 
     let out_data = output_buffer.as_mut_slice();
 
     let mut state = Inflater::new_gzip();
     let mut input_eof = false;
-    let mut loop_count: uint = 0;
+    let mut loop_count: usize = 0;
     let mut total_out: u64 = 0;
 
     // Main loop
@@ -153,13 +147,11 @@ fn test_inflate(in_bufsize: uint, out_bufsize: uint)
 }
 
 #[test]
-fn test_inflate_reader_basic()
-{
+fn test_inflate_reader_basic() {
     test_inflate_reader("zlib-1.2.8.tar.gz", "zlib-1.2.8.tar", 0x1000, 0x1000);
 }
 
-fn test_inflate_reader(input_filename: &str, check_filename: &str, in_bufsize: uint, out_bufsize: uint)
-{
+fn test_inflate_reader(input_filename: &str, check_filename: &str, in_bufsize: usize, out_bufsize: usize) {
     let input_path = Path::new(input_filename);
     let check_path = Path::new(check_filename);     // contains the expected (good) output
 

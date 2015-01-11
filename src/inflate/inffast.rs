@@ -10,7 +10,7 @@ use std::slice::bytes::copy_memory;
 
 pub struct BufPos<'a> {
     pub buf: &'a [u8],
-    pub pos: uint
+    pub pos: usize
 }
 
 impl<'a> BufPos<'a> {
@@ -36,7 +36,7 @@ impl<'a> BufPos<'a> {
 
 struct BufPosMut<'a> {
     buf: &'a mut [u8],
-    pos: uint
+    pos: usize
 }
 
 impl<'a> BufPosMut<'a> {
@@ -61,20 +61,20 @@ impl<'a> BufPosMut<'a> {
 
 struct InputState<'a> {
     pub buf: &'a [u8],
-    pub pos: uint,
+    pub pos: usize,
     pub hold: u32,
-    pub bits: uint,
+    pub bits: usize,
 }
 
 #[cfg(feature = "unsafe_fast")]
 #[inline]
-fn read_byte(s: &[u8], pos: uint) -> u8 {
+fn read_byte(s: &[u8], pos: usize) -> u8 {
     unsafe { *s.get_unchecked(pos) }
 }
 
 #[cfg(not(feature = "unsafe_fast"))]
 #[inline]
-fn read_byte(s: &[u8], pos: uint) -> u8 {
+fn read_byte(s: &[u8], pos: usize) -> u8 {
     s[pos]
 }
 
@@ -104,7 +104,7 @@ impl<'a> InputState<'a> {
     }
 
     #[inline]
-    pub fn drop_bits(&mut self, n: uint) {
+    pub fn drop_bits(&mut self, n: usize) {
         self.bits -= n;
         self.hold >>= n;
         // debug!("dropped {} bits, bits = {:2}, hold = 0x{:08x}", n, self.bits, self.hold);
@@ -147,7 +147,7 @@ impl<'a> InputState<'a> {
 //
 
 #[inline(never)]
-fn copy_within_output_buffer(buf: &mut [u8], dstpos: uint, srcpos: uint, len: uint) {
+fn copy_within_output_buffer(buf: &mut [u8], dstpos: usize, srcpos: usize, len: usize) {
     // correct, known good
 
     // the source region must be at lower indices than the dest region
@@ -195,8 +195,8 @@ enum InflateFastState {
 }
 
 pub struct InflateFastResult {
-    pub strm_next_in: uint,
-    pub strm_next_out: uint,
+    pub strm_next_in: usize,
+    pub strm_next_out: usize,
     pub result: Result<(), &'static str>,
 }
 
@@ -205,8 +205,8 @@ pub fn inflate_fast(
     state: &mut Inflater,
     input_buffer: &[u8],
     output_buffer: &mut [u8],
-    strm_next_in: uint,
-    strm_next_out: uint) -> InflateFastResult
+    strm_next_in: usize,
+    strm_next_out: usize) -> InflateFastResult
 {
     debug_assert!(input_buffer.len() >= 5);
     debug_assert!(output_buffer.len() >= 257);
@@ -217,21 +217,21 @@ pub fn inflate_fast(
     // copy state to local variables
     let mut out = BufPosMut { buf: output_buffer, pos: out_pos_start };
 
-    let end :uint = out.buf.len() - 257; // out.pos + (*strm_avail_out - 257);       // while out < end, enough space available
+    let end :usize = out.buf.len() - 257; // out.pos + (*strm_avail_out - 257);       // while out < end, enough space available
     debug_assert!(strm_next_out <= end);
 
 // #ifdef INFLATE_STRICT
-    let dmax: uint = state.dmax;                    // maximum distance from zlib header
+    let dmax: usize = state.dmax;                    // maximum distance from zlib header
 // #endif
 
-    let wsize: uint = state.wsize;                  // window size or zero if not using window
-    let whave: uint = state.whave;                  // valid bytes in the window
-    let wnext: uint = state.wnext;                  // window write index
+    let wsize: usize = state.wsize;                  // window size or zero if not using window
+    let whave: usize = state.whave;                  // valid bytes in the window
+    let wnext: usize = state.wnext;                  // window write index
     let window = state.window.as_slice();           // allocated sliding window, if wsize != 0
 
     let codes = &state.codes;                       // local strm.codes
-    let lcode: uint = state.lencode;                // local strm.lencode; is index into 'codes'
-    let dcode: uint = state.distcode;               // local strm.distcode; is index into 'codes'
+    let lcode: usize = state.lencode;                // local strm.lencode; is index into 'codes'
+    let dcode: usize = state.distcode;               // local strm.distcode; is index into 'codes'
     let lmask: u32 = (1 << state.lenbits) - 1;      // mask for first level of length codes
     let dmask: u32 = (1 << state.distbits) - 1;     // mask for first level of distance codes
 
@@ -246,12 +246,12 @@ pub fn inflate_fast(
         hold: state.hold,
         bits: state.bits,
     };
-    let last: uint = input_buffer.len() - 5; // input.pos + (*strm_avail_in - 5);     // (index into input_buffer) have enough input while in < last
+    let last: usize = input_buffer.len() - 5; // input.pos + (*strm_avail_in - 5);     // (index into input_buffer) have enough input while in < last
 
     // we use 'st' to simulate gotos
     let mut st = InflateFastState::Start;
 
-    let mut len: uint = 0;
+    let mut len: usize = 0;
 
     let mut here: Code;         // retrieved table entry
     here = Code { op: 0, bits: 0, val: 0 }; // cannot prove this is unused yet
@@ -267,8 +267,8 @@ pub fn inflate_fast(
                     input.load_byte();
                     input.load_byte();
                 }
-                // here = codes[(lcode + (input.hold & lmask) as uint) as uint]; // correct
-                here = unsafe { *(codes.as_slice()).get_unchecked((lcode + (input.hold & lmask) as uint) as uint) };
+                // here = codes[(lcode + (input.hold & lmask) as usize) as usize]; // correct
+                here = unsafe { *(codes.as_slice()).get_unchecked((lcode + (input.hold & lmask) as usize) as usize) };
                 st = InflateFastState::DoLen;
                 continue;
             }
@@ -276,8 +276,8 @@ pub fn inflate_fast(
             InflateFastState::DoLen => {
               //dolen:
                 debug!("dolen: out={} hold={:08x} bits={} here.bits={} here.op={:08x}", out.pos, input.hold, input.bits, here.bits, here.op);
-                input.drop_bits(here.bits as uint);
-                let op = here.op as uint;
+                input.drop_bits(here.bits as usize);
+                let op = here.op as usize;
                 if op == 0 {
                     // literal
                     // debug!("(dolen): consumed {:2} bits, {:2} bits left, output literal byte: 0x{:2x}", here.bits, input.bits, here.val);
@@ -291,13 +291,13 @@ pub fn inflate_fast(
                 }
                 else if (op & 16) != 0 {
                     // length base
-                    len = here.val as uint; // match length; used in DoDist
+                    len = here.val as usize; // match length; used in DoDist
                     let extra_bits = op & 15; // number of extra bits
                     if extra_bits != 0 {
                         if input.bits < extra_bits {
                             input.load_byte();
                         }
-                        let more_len = (input.hold & ((1 << extra_bits) - 1)) as uint;
+                        let more_len = (input.hold & ((1 << extra_bits) - 1)) as usize;
                         len += more_len;
                         input.drop_bits(extra_bits);
                         // debug!("    used {} extra bits to decode {} more length", extra_bits, more_len);
@@ -310,15 +310,15 @@ pub fn inflate_fast(
                         // input.load_2bytes();
                     }
 
-                    // here = codes[dcode + (input.hold & dmask) as uint]; // safe; correct
-                    here = unsafe { *codes.as_slice().get_unchecked(dcode + (input.hold & dmask) as uint) };
+                    // here = codes[dcode + (input.hold & dmask) as usize]; // safe; correct
+                    here = unsafe { *codes.as_slice().get_unchecked(dcode + (input.hold & dmask) as usize) };
 
                     st = InflateFastState::DoDist;
                     continue;
                 }
                 else if (op & 64) == 0 {
                     // 2nd level length code
-                    here = codes[lcode + (here.val as uint + (input.hold as uint & ((1 << op) - 1)))];
+                    here = codes[lcode + (here.val as usize + (input.hold as usize & ((1 << op) - 1)))];
                     // debug!("second level length code");
                     st = InflateFastState::DoLen;
                     continue;
@@ -339,21 +339,21 @@ pub fn inflate_fast(
 
             InflateFastState::DoDist => {
               //dodist:
-                let distbits = here.bits as uint;
+                let distbits = here.bits as usize;
                 input.drop_bits(distbits);
-                let op = here.op as uint;
+                let op = here.op as usize;
                 // debug!("(dodist): used {} bits ({} bits left), op = 0x{:x}", distbits, input.bits, here.op);
                 if (op & 16) != 0 {
                     // distance base
-                    let distbase = here.val as uint;
-                    let extra_bits: uint = op & 15; // number of extra bits
+                    let distbase = here.val as usize;
+                    let extra_bits: usize = op & 15; // number of extra bits
                     if input.bits < extra_bits {
                         input.load_byte();
                         if input.bits < extra_bits {
                             input.load_byte();
                         }
                     }
-                    let dist = distbase + (input.hold as uint & ((1 << extra_bits) - 1));
+                    let dist = distbase + (input.hold as usize & ((1 << extra_bits) - 1));
     // #ifdef INFLATE_STRICT
                     if dist > dmax {
                         debug!("invalid distance, too far back.  dist {} > dmax {}", dist, dmax);
@@ -531,7 +531,7 @@ pub fn inflate_fast(
                 else if (op & 64) == 0 {
                     // 2nd level distance code
                     // debug!("second-level distance code");
-                    here = codes[dcode + (here.val as uint + (input.hold & ((1 << op) - 1)) as uint)];
+                    here = codes[dcode + (here.val as usize + (input.hold & ((1 << op) - 1)) as usize)];
                     Tracevv!("second level distance code, op {} bits {} val {}", here.op, here.bits, here.val);
                     st = InflateFastState::DoDist;
                     continue;

@@ -1,5 +1,4 @@
-#![allow(unused_imports)]
-#![allow(unused_mut)]
+#![allow(unstable)]
 
 extern crate zlib;
 
@@ -7,11 +6,8 @@ use std::io;
 use std::iter::repeat;
 use std::os;
 use std::os::set_exit_status;
-use zlib::{WINDOW_BITS_DEFAULT};
 use zlib::inflate::{Inflater,InflateResult};
-use zlib::inflate::InflateReader;
 use std::io::IoErrorKind;
-use std::io::IoError;
 
 macro_rules! bad_arg {
     ($arg:expr, $msg:expr) => {
@@ -27,7 +23,7 @@ macro_rules! get_int_arg {
     ($arg:expr, $valopt:expr, $min:expr) => {
         {
             if let Some(aval) = $valopt {
-                let value: uint = if let Some(value) = aval.parse::<uint>() { value } else {
+                let value: usize = if let Some(value) = aval.parse::<usize>() { value } else {
                     println!("arg '{}' is invalid: value is not a valid number", $arg);
                     set_exit_status(1);
                     return;
@@ -63,11 +59,11 @@ struct CheckFileState {
 
 
 fn main() {
-    let mut iter_count: uint = 1;
+    let mut iter_count: usize = 1;
     let mut input_filename: Option<String> = None;
     let mut check_filename: Option<String> = None;
-    let mut input_buffer_size: uint = 0x10000;
-    let mut output_buffer_size: uint = 0x10000;
+    let mut input_buffer_size: usize = 0x10000;
+    let mut output_buffer_size: usize = 0x10000;
     let mut verbose = false;
     let mut verbose_print_blocks = false;
     let mut read_entire_file = false;
@@ -170,7 +166,6 @@ fn main() {
     let mut check_state = if let Some(ref check_fn) = check_filename {
         let check_path = Path::new(check_fn);
         let check_file_raw = io::File::open(&check_path).unwrap();
-        // let check_file = io::BufferedReader::new(check_file_raw);
         Some(CheckFileState {
             reader: check_file_raw
         })
@@ -188,7 +183,7 @@ fn main() {
     let out_data = output_buffer.as_mut_slice();
 
     let mut state = Inflater::new_gzip();
-    let mut cycle: uint = 0;
+    let mut cycle: usize = 0;
 
     for iter in range(0, iter_count) {
         if verbose {
@@ -208,7 +203,7 @@ fn main() {
         let mut total_in: u64 = 0;
         let mut total_out: u64 = 0;
 
-        let mut input_pos: uint = 0;
+        let mut input_pos: usize = 0;
 
         loop {
             if verbose {
@@ -322,11 +317,11 @@ fn print_block(data: &[u8]) {
 
     println!("print_block: len={}", data.len());
 
-    for i in range(0, data.len()) {
+    for i in (0..data.len()) {
         let b = data[i];
         s.push(' ');
-        s.push(HEX[(b >> 4) as uint]);
-        s.push(HEX[(b & 0xf) as uint]);
+        s.push(HEX[(b >> 4) as usize]);
+        s.push(HEX[(b & 0xf) as usize]);
         if ((i + 1) % width) == 0 {
             println!("{}", s);
             s.clear();

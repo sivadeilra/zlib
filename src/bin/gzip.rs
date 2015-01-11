@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 extern crate zlib;
 
 use std::io;
@@ -17,8 +19,8 @@ fn main()
     let input_path = Path::new(&args[1]);
     let output_path = Path::new(&args[2]);
 
-    let in_bufsize: uint = 1 << 22;
-    let out_bufsize: uint = 1 << 22;
+    let in_bufsize: usize = 1 << 22;
+    let out_bufsize: usize = 1 << 22;
 
     // open compressed input file, create a decompressor for it
     let input_file = io::BufferedReader::new(io::File::open(&input_path).unwrap());
@@ -43,7 +45,7 @@ fn main()
                 total_out += chunk_bytes as u64;
             }
             Err(err) => {
-                println!("push() returned error: {} {}", err.desc, err.detail);
+                println!("push() returned error: {} {:?}", err.desc, err.detail);
                 break;
             }
         }

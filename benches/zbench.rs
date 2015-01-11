@@ -1,5 +1,4 @@
-#![allow(unused_imports)]
-#![allow(unused_mut)]
+#![allow(unstable)]
 #![feature(plugin)]
 
 #[plugin]
@@ -11,24 +10,19 @@ extern crate zlib;
 
 use std::io;
 use std::iter::repeat;
-use std::os;
-use std::os::set_exit_status;
 use std::io::IoErrorKind;
-use std::io::IoError;
 use test::Bencher;
 
-use zlib::{WINDOW_BITS_DEFAULT};
 use zlib::inflate::{Inflater,InflateResult};
-use zlib::inflate::InflateReader;
 
 fn run_zbench(
     bencher: &mut Bencher,
     filename: &str,
-    input_buffer_size: uint, 
-    output_buffer_size: uint,
+    input_buffer_size: usize, 
+    output_buffer_size: usize,
     read_entire_file: bool)
 {
-    let iter_count: uint = 1;
+    let iter_count: usize = 1;
 
     let input_path = Path::new(&filename);
 
@@ -56,9 +50,9 @@ fn run_zbench(
     let out_data = output_buffer.as_mut_slice();
 
     let mut state = Inflater::new_gzip();
-    let mut cycle: uint = 0;
+    let mut cycle: usize = 0;
 
-    for iter in range(0, iter_count) {
+    for _ in (0..iter_count) {
         // This is the decode loop for an entire file.
         input_file.seek(0, io::SeekSet).unwrap();
         state.reset();
@@ -67,7 +61,7 @@ fn run_zbench(
         let mut total_in: u64 = 0;
         let mut total_out: u64 = 0;
 
-        let mut input_pos: uint = 0;
+        let mut input_pos: usize = 0;
 
         bencher.iter(|| {
             loop {
@@ -77,7 +71,7 @@ fn run_zbench(
                     input_buffer.clear();
                     input_pos = 0;
                     match input_file.push(input_buffer_size, &mut input_buffer) {
-                        Ok(bytes_read) => {
+                        Ok(_) => {
                             // ok, loaded some input data
                         }
                         Err(err) => {

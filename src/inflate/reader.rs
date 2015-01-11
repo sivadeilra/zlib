@@ -11,7 +11,7 @@ pub struct InflateReader<R> {
     state: Inflater,
 
     inbuf: Vec<u8>,
-    next_in: uint,
+    next_in: usize,
 
     /// Set true when 'src' reports EOF.
     src_eof: bool,
@@ -20,14 +20,14 @@ pub struct InflateReader<R> {
 impl<R:Reader> InflateReader<R> {
     /// Creates a new InflateReader which uses `src` as its input stream.
     pub fn new_gzip(
-        inbufsize: uint,
+        inbufsize: usize,
         src: R) -> InflateReader<R> {
         debug!("InflateReader::new_gzip()");
         InflateReader::new_with_inflater(inbufsize, Inflater::new_gzip(), src)
     }
 
     pub fn new_inflate(
-        inbufsize: uint,
+        inbufsize: usize,
         src: R) -> InflateReader<R> {
         debug!("InflateReader::new_inflate()");
         InflateReader::new_with_inflater(inbufsize,
@@ -36,7 +36,7 @@ impl<R:Reader> InflateReader<R> {
     }
 
     pub fn new_with_inflater(
-        inbufsize: uint,
+        inbufsize: usize,
         inflater: Inflater,
         src: R) -> InflateReader<R> {
         let inbufsize = max(inbufsize, 0x1000);
@@ -79,8 +79,8 @@ impl<R:Reader> InflateReader<R> {
 }
 
 impl<R:Reader> Reader for InflateReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
-        let mut outpos: uint = 0;
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+        let mut outpos: usize = 0;
 
         if buf.len() == 0 {
             // not really

@@ -26,19 +26,19 @@ use statictrees::{
 };
 
 /// Maximum heap size
-const HEAP_SIZE: uint = 2 * L_CODES + 1;
+const HEAP_SIZE: usize = 2 * L_CODES + 1;
 
 /// Size of bit buffer in bi_buf
-const BUF_SIZE: uint = 16;
+const BUF_SIZE: usize = 16;
 
 /* Stream status */
-const INIT_STATE: uint = 42;
-const EXTRA_STATE: uint = 69;
-const NAME_STATE: uint = 73;
-const COMMENT_STATE: uint = 91;
-const HCRC_STATE: uint = 103;
-const BUSY_STATE: uint = 113;
-const FINISH_STATE: uint = 666;
+const INIT_STATE: usize = 42;
+const EXTRA_STATE: usize = 69;
+const NAME_STATE: usize = 73;
+const COMMENT_STATE: usize = 91;
+const HCRC_STATE: usize = 103;
+const BUSY_STATE: usize = 113;
+const FINISH_STATE: usize = 666;
 
 // A Pos is an index in the character window. We use short instead of int to
 // save space in the various tables. IPos is used only for parameter passing.
@@ -48,21 +48,21 @@ type IPos = u32;
 
 // was "internal_state" / "deflate_state"
 struct DeflateState {
-    status: uint,                   // as the name implies
+    status: usize,                   // as the name implies
     pending_buf: Vec<u8>,           // output still pending
-    pending_buf_size: uint,         // size of pending_buf // use pending_buf.len()
-    pending_out: uint,              // next pending byte to output to the stream (is index into what, pending_buf?)
-    pending: uint,                  // number of bytes in the pending buffer
-    wrap: uint,                     // bit 0 true for zlib, bit 1 true for gzip
+    pending_buf_size: usize,         // size of pending_buf // use pending_buf.len()
+    pending_out: usize,              // next pending byte to output to the stream (is index into what, pending_buf?)
+    pending: usize,                  // number of bytes in the pending buffer
+    wrap: usize,                     // bit 0 true for zlib, bit 1 true for gzip
     gzhead: Option<GZipHeader>,     // gzip header information to write
-    gzindex: uint,                  // where in extra, name, or comment
+    gzindex: usize,                  // where in extra, name, or comment
     method: u8,                     // can only be DEFLATED
-    last_flush: int,                // value of flush param for previous deflate call
+    last_flush: isize,                // value of flush param for previous deflate call
 
     // used by deflate.c:
-    w_size: uint,        // LZ77 window size (32K by default)
-    w_bits: uint,        // log2(w_size)  (8..16)
-    w_mask: uint,        // w_size - 1
+    w_size: usize,        // LZ77 window size (32K by default)
+    w_bits: usize,        // log2(w_size)  (8..16)
+    w_mask: usize,        // w_size - 1
 
     // Sliding window. Input bytes are read into the second half of the window,
     // and move to the first half later to keep a dictionary of at least wSize
@@ -75,7 +75,7 @@ struct DeflateState {
 
     // Actual size of window: 2*wSize, except when the user input buffer
     // is directly used as sliding window.
-    window_size: uint,
+    window_size: usize,
 
     // Link to older string with same hash index. To limit the size of this
     // array to 64K, this link is maintained only for the last 32K strings.
@@ -84,40 +84,40 @@ struct DeflateState {
 
     head: Vec<Pos>,       // Heads of the hash chains or NIL.
 
-    ins_h: uint,          // hash index of string to be inserted
-    hash_size: uint,      // number of elements in hash table
-    hash_bits: uint,      // log2(hash_size)
-    hash_mask: uint,      // hash_size-1
+    ins_h: usize,          // hash index of string to be inserted
+    hash_size: usize,      // number of elements in hash table
+    hash_bits: usize,      // log2(hash_size)
+    hash_mask: usize,      // hash_size-1
 
     // Number of bits by which ins_h must be shifted at each input
     // step. It must be such that after MIN_MATCH steps, the oldest
     // byte no longer takes part in the hash key, that is:
     //   hash_shift * MIN_MATCH >= hash_bits
-    hash_shift: uint,
+    hash_shift: usize,
 
     // Window position at the beginning of the current output block. Gets
     // negative when the window is moved backwards.
-    block_start: int,
+    block_start: isize,
 
-    match_length: uint,           // length of best match
+    match_length: usize,           // length of best match
     prev_match: IPos,             // previous match
-    match_available: int,         // set if previous match exists
-    strstart: uint,               // start of string to insert
-    match_start: uint,            // start of matching string
-    lookahead: uint,              // number of valid bytes ahead in window
+    match_available: isize,         // set if previous match exists
+    strstart: usize,               // start of string to insert
+    match_start: usize,            // start of matching string
+    lookahead: usize,              // number of valid bytes ahead in window
 
     // Length of the best match at previous step. Matches not greater than this
     // are discarded. This is used in the lazy match evaluation.
-    prev_length: uint,
+    prev_length: usize,
 
     // To speed up deflation, hash chains are never searched beyond this
     // length.  A higher limit improves compression ratio but degrades the speed.
-    max_chain_length: uint,
+    max_chain_length: usize,
 
     // Attempt to find a better match only when the current match is strictly
     // smaller than this value. This mechanism is used only for compression
     // levels >= 4.
-    max_lazy_match: uint,
+    max_lazy_match: usize,
 
 // #   define max_insert_length  max_lazy_match
     /* Insert new strings in the hash table only if the match length is not
@@ -125,13 +125,13 @@ struct DeflateState {
      * max_insert_length is used only for compression levels <= 3.
      */
 
-    level: uint,    /* compression level (1..9) */
-    strategy: uint, /* favor or force Huffman coding*/
+    level: usize,    /* compression level (1..9) */
+    strategy: usize, /* favor or force Huffman coding*/
 
-    good_match: uint,
+    good_match: usize,
     /* Use a faster search when the previous match is longer than this */
 
-    nice_match: int, /* Stop searching when current match exceeds this */
+    nice_match: isize, /* Stop searching when current match exceeds this */
 
                 /* used by trees.c: */
     /* Didn't use ct_data typedef below to suppress compiler warning */
@@ -151,9 +151,9 @@ struct DeflateState {
     bl_count: [u16; MAX_BITS+1],
     /* number of codes at each bit length for an optimal tree */
 
-    heap: [int; 2*L_CODES+1],      /* heap used to build the Huffman trees */
-    heap_len: uint,               /* number of elements in the heap */
-    heap_max: uint,               /* element of largest frequency */
+    heap: [isize; 2*L_CODES+1],      /* heap used to build the Huffman trees */
+    heap_len: usize,               /* number of elements in the heap */
+    heap_max: usize,               /* element of largest frequency */
     // The sons of heap[n] are heap[2*n] and heap[2*n+1]. heap[0] is not used.
     // The same heap array is used to build all trees.
 
@@ -179,36 +179,36 @@ struct DeflateState {
     //     fast adaptation but have of course the overhead of transmitting
     //     trees more frequently.
     //   - I can't count above 4
-    lit_bufsize: uint,
+    lit_bufsize: usize,
 
     // running index in l_buf
-    last_lit: uint,      
+    last_lit: usize,      
 
     /// Buffer for distances. To simplify the code, d_buf and l_buf have
     /// the same number of elements. To use different lengths, an extra flag
     /// array would be necessary.
     d_buf: Vec<u16>,
 
-    opt_len: uint,        /* bit length of current block with optimal trees */
-    static_len: uint,     /* bit length of current block with static trees */
-    matches: uint,       /* number of string matches in current block */
-    insert: uint,        /* bytes at end of window left to insert */
+    opt_len: usize,        /* bit length of current block with optimal trees */
+    static_len: usize,     /* bit length of current block with static trees */
+    matches: usize,       /* number of string matches in current block */
+    insert: usize,        /* bytes at end of window left to insert */
 
 // #ifdef DEBUG
-    compressed_len: uint, /* total bit length of compressed file mod 2^32 */
-    bits_sent: uint,      /* bit length of compressed data sent mod 2^32 */
+    compressed_len: usize, /* total bit length of compressed file mod 2^32 */
+    bits_sent: usize,      /* bit length of compressed data sent mod 2^32 */
 // #endif
 
     bi_buf: u16,
     /* Output buffer. bits are inserted starting at the bottom (least
      * significant bits).
      */
-    bi_valid: uint,
+    bi_valid: usize,
     /* Number of valid bits in bi_buf.  All bits above the last valid bit
      * are always zero.
      */
 
-    high_water: uint,
+    high_water: usize,
     /* High water mark offset in window for initialized bytes -- bytes above
      * this are set to zero in order to avoid memory check warnings when
      * longest match routines access bytes past the input.  This is then
@@ -229,10 +229,10 @@ pub fn put_byte(s: &mut DeflateState, c: u8)
 
 /// Minimum amount of lookahead, except at the end of the input file.
 /// See deflate.c for comments about the MIN_MATCH+1.
-pub const MIN_LOOKAHEAD: uint = (MAX_MATCH+MIN_MATCH+1);
+pub const MIN_LOOKAHEAD: usize = (MAX_MATCH+MIN_MATCH+1);
 
 // was MAX_DIST
-pub fn max_dist(s: &mut DeflateState) -> uint
+pub fn max_dist(s: &mut DeflateState) -> usize
 {
     s.w_size - MIN_LOOKAHEAD
 }
@@ -242,15 +242,15 @@ pub fn max_dist(s: &mut DeflateState) -> uint
 
 /// Number of bytes after end of data in window to initialize in order to avoid
 /// memory checker errors from longest match routines */
-pub const WIN_INIT: uint = MAX_MATCH;
+pub const WIN_INIT: usize = MAX_MATCH;
 
 pub fn d_code(dist: u16) -> u16
 {
     if dist < 256 {
-        DIST_CODE[dist as uint] as u16
+        DIST_CODE[dist as usize] as u16
     }
     else {
-        DIST_CODE[256 + (dist as uint >> 7)] as u16
+        DIST_CODE[256 + (dist as usize >> 7)] as u16
     }
 }
 
@@ -265,7 +265,7 @@ pub fn _tr_tally_lit(s: &mut DeflateState, c: u8) -> bool {
     s.d_buf[s.last_lit] = 0;
     s.l_buf[s.last_lit] = cc;
     s.last_lit += 1;
-    s.dyn_ltree_fc /* freq */[cc as uint] += 1;
+    s.dyn_ltree_fc /* freq */[cc as usize] += 1;
     s.last_lit == s.lit_bufsize - 1
 }
 
@@ -273,12 +273,12 @@ pub fn _tr_tally_lit(s: &mut DeflateState, c: u8) -> bool {
 pub fn _tr_tally_dist(s: &mut DeflateState, distance: u16, length: u8) -> bool {
     let len = length;
     let mut dist = distance;
-    s.d_buf[s.last_lit as uint] = dist;
-    s.l_buf[s.last_lit as uint] = len;
+    s.d_buf[s.last_lit as usize] = dist;
+    s.l_buf[s.last_lit as usize] = len;
     s.last_lit += 1;
     dist -= 1;
-    s.dyn_ltree_fc/*freq*/[LENGTH_CODE[len as uint] as uint + LITERALS + 1] += 1;
-    s.dyn_dtree_fc/*freq*/[d_code(dist) as uint] += 1;
+    s.dyn_ltree_fc/*freq*/[LENGTH_CODE[len as usize] as usize + LITERALS + 1] += 1;
+    s.dyn_dtree_fc/*freq*/[d_code(dist) as usize] += 1;
     s.last_lit == s.lit_bufsize - 1
 }
 
@@ -430,19 +430,19 @@ impl DeflateState {
  */
 
 /// Bit length codes must not exceed `MAX_BL_BITS` bits
-const MAX_BL_BITS: uint = 7;
+const MAX_BL_BITS: usize = 7;
 
 /// End of block literal code
-const END_BLOCK: uint = 256;
+const END_BLOCK: usize = 256;
 
 /// Repeat previous bit length 3-6 times (2 bits of repeat count)
-const REP_3_6: uint = 16;
+const REP_3_6: usize = 16;
 
 /// Repeat a zero length 3-10 times  (3 bits of repeat count)
-const REPZ_3_10: uint = 17;
+const REPZ_3_10: usize = 17;
 
 /// Repeat a zero length 11-138 times  (7 bits of repeat count)
-const REPZ_11_138: uint = 18;
+const REPZ_11_138: usize = 18;
 
 // from trees.c
 
@@ -452,7 +452,7 @@ struct TreeDesc {
     fc: Vec<u16>,           /* the dynamic tree */
     dl: Vec<u8>,
 
-    max_code: uint,            /* largest code with non zero frequency */
+    max_code: usize,            /* largest code with non zero frequency */
     stat_desc: StaticTreeDesc, /* the corresponding static tree */
 }
 
@@ -479,8 +479,8 @@ fn send_code(s: &mut DeflateState, c: u8, tree: &TreeDesc)
     println!("send_code: {:3}", c);
 
     send_bits(s,
-        tree.fc/*codes*/[c as uint] as u32,
-        tree.dl/*lengths*/[c as uint] as uint);
+        tree.fc/*codes*/[c as usize] as u32,
+        tree.dl/*lengths*/[c as usize] as usize);
 }
 
 /* ===========================================================================
@@ -500,7 +500,7 @@ fn put_short(s: &mut DeflateState, w: u16)
  */
 // #ifdef DEBUG
 
-fn send_bits(s: &mut DeflateState, value: u32, length: uint)
+fn send_bits(s: &mut DeflateState, value: u32, length: usize)
     // DeflateState *s;
     // int value;  /* value to send */
     // int length; /* number of bits */
@@ -561,7 +561,7 @@ fn init_block(s: &mut DeflateState)
     s.matches = 0;
 }
 
-const SMALLEST: uint = 1;
+const SMALLEST: usize = 1;
 /* Index within the heap array of least frequent node in the Huffman tree */
 
 
@@ -569,8 +569,7 @@ const SMALLEST: uint = 1;
  * Remove the smallest element from the heap and recreate the heap with
  * one less element. Updates heap and heap_len.
  */
-fn pqremove(s: &mut DeflateState, tree: &TreeDesc) -> int
-{
+fn pqremove(s: &mut DeflateState, tree: &TreeDesc) -> isize {
     let top = s.heap[SMALLEST];
     s.heap_len -= 1;
     s.heap[SMALLEST] = s.heap[s.heap_len];
@@ -582,8 +581,7 @@ fn pqremove(s: &mut DeflateState, tree: &TreeDesc) -> int
  * Compares two subtrees, using the tree depth as tie breaker when
  * the subtrees have equal frequency. This minimizes the worst case length.
  */
-fn smaller(tree: &TreeDesc, n: uint, m: uint, depth: &[u8]) -> bool
-{
+fn smaller(tree: &TreeDesc, n: usize, m: usize, depth: &[u8]) -> bool {
     tree.fc/*freq*/[n] < tree.fc/*freq*/[m] || (tree.fc/*freq*/[n] == tree.fc/*freq*/[m] && depth[n] <= depth[m])
 }
 
@@ -596,18 +594,18 @@ fn smaller(tree: &TreeDesc, n: uint, m: uint, depth: &[u8]) -> bool
 fn pqdownheap(
     s: &mut DeflateState,
     tree: &TreeDesc,        /* the tree to restore */
-    k: uint)                /* node to move down */
+    k: usize)                /* node to move down */
 {
     let mut k = k;
     let v = s.heap[k];
     let mut j = k << 1;  /* left son of k */
     while j <= s.heap_len {
         /* Set j to the smallest of the two sons: */
-        if j < s.heap_len && smaller(tree, s.heap[j+1] as uint, s.heap[j] as uint, s.depth.as_slice()) {
+        if j < s.heap_len && smaller(tree, s.heap[j+1] as usize, s.heap[j] as usize, s.depth.as_slice()) {
             j += 1;
         }
         /* Exit if v is smaller than both sons */
-        if smaller(tree, v as uint, s.heap[j] as uint, &s.depth) {
+        if smaller(tree, v as usize, s.heap[j] as usize, &s.depth) {
             break;
         }
 
@@ -1206,7 +1204,7 @@ local void compress_block(s, ltree, dtree)
         } /* literal or match pair ? */
 
         /* Check that the overlay between pending_buf and d_buf+l_buf is ok: */
-        Assert((uint)(s.pending) < s.lit_bufsize + 2*lx,
+        Assert((usize)(s.pending) < s.lit_bufsize + 2*lx,
                "pendingBuf overflow");
 
     } while (lx < s.last_lit);

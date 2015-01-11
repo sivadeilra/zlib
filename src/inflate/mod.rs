@@ -24,7 +24,7 @@ use WINDOW_BITS_MAX;
 
 pub use self::reader::InflateReader;
 
-const DEFAULT_DMAX: uint = 32768;
+const DEFAULT_DMAX: usize = 32768;
 
 mod inffast;
 mod inftrees;
@@ -64,7 +64,7 @@ macro_rules! PULLBYTE {
 macro_rules! NEEDBITS {
     ($loc:expr, $n:expr) => {
         {
-            let n :uint = $n;
+            let n :usize = $n;
             while $loc.bits < n {
                 PULLBYTE!($loc);
             }
@@ -78,7 +78,7 @@ pub enum InflateResult
 {
     Eof(u32),               // input data stream has reached its end; value is crc32 of stream
     NeedInput,              // could decode more, but need more input buffer space
-    Decoded(uint, uint),    // decoded N bytes of input, wrote N bytes of output
+    Decoded(usize, usize),    // decoded N bytes of input, wrote N bytes of output
     InvalidData,            // input data is malformed, decoding has halted
 }
 
@@ -172,47 +172,47 @@ pub struct Inflater // was inflate_state
     wrap: u32,                  // bit 0 true for zlib, bit 1 true for gzip
     havedict: bool,             // true if dictionary provided
     flags: u32,                 // gzip header method and flags (0 if zlib)
-    dmax: uint,                 // zlib header max distance (INFLATE_STRICT)
+    dmax: usize,                 // zlib header max distance (INFLATE_STRICT)
     check: u32,                 // protected copy of check value
-    total: uint,                // protected copy of output count
+    total: usize,                // protected copy of output count
     head: Option<GZipHeader>,   // where to save gzip header information
 
     // sliding window
-    wbits: uint,                // log base 2 of requested window size
-    wsize: uint,                // window size or zero if not using window
-    whave: uint,                // valid bytes in the window
-    wnext: uint,                // window write index
+    wbits: usize,                // log base 2 of requested window size
+    wsize: usize,                // window size or zero if not using window
+    whave: usize,                // valid bytes in the window
+    wnext: usize,                // window write index
     window: Vec<u8>,            // allocated sliding window, if needed
 
     // bit accumulator
     hold: u32,                  // input bit accumulator
-    bits: uint,                 // number of bits in "hold"
+    bits: usize,                 // number of bits in "hold"
 
     // for string and stored block copying
-    length: uint,               // literal or length of data to copy
-    offset: uint,               // distance back to copy string from
+    length: usize,               // literal or length of data to copy
+    offset: usize,               // distance back to copy string from
 
     // for table and code decoding
-    extra: uint,                // extra bits needed
+    extra: usize,                // extra bits needed
 
     // fixed and dynamic code tables
-    lencode: uint,              // starting table for length/literal codes; is an index into 'codes'
-    distcode: uint,             // starting table for distance codes; is an index into 'codes'
-    lenbits: uint,              // index bits for lencode
-    distbits: uint,             // index bits for distcode
+    lencode: usize,              // starting table for length/literal codes; is an index into 'codes'
+    distcode: usize,             // starting table for distance codes; is an index into 'codes'
+    lenbits: usize,              // index bits for lencode
+    distbits: usize,             // index bits for distcode
 
     // dynamic table building
-    ncode: uint,                // number of code length code lengths
-    nlen: uint,                 // number of length code lengths
-    ndist: uint,                // number of distance code lengths
-    have: uint,                 // number of code lengths in lens[]
-    next: uint,                 // next available space in codes[]
+    ncode: usize,                // number of code length code lengths
+    nlen: usize,                 // number of length code lengths
+    ndist: usize,                // number of distance code lengths
+    have: usize,                 // number of code lengths in lens[]
+    next: usize,                 // next available space in codes[]
     lens: [u16; 320],           // temporary storage for code lengths
     work: [u16; 288],           // work area for code table building
     codes: [Code; ENOUGH],      // space for code tables
     sane: bool,                 // if false, allow invalid distance too far
-    back: uint,                 // bits back of last unprocessed length/lit
-    was: uint,                  // initial length of match
+    back: usize,                 // bits back of last unprocessed length/lit
+    was: usize,                  // initial length of match
 
     strm: ZStream,
 
@@ -233,14 +233,14 @@ impl Inflater {
 
     /// Creates a new Inflater for decoding a raw DEFLATE stream.  This should not
     /// be used for decoding GZIP streams.
-    pub fn new_inflate(window_bits: uint) -> Inflater {
+    pub fn new_inflate(window_bits: usize) -> Inflater {
         Inflater::internal_new(window_bits, 0)
     }
 
-    fn internal_new(window_bits: uint, wrap: u32) -> Inflater {
+    fn internal_new(window_bits: usize, wrap: u32) -> Inflater {
         assert!(window_bits >= WINDOW_BITS_MIN && window_bits <= WINDOW_BITS_MAX);
 
-        let wsize: uint = 1 << window_bits;
+        let wsize: usize = 1 << window_bits;
 
         Inflater {
             mode: InflateMode::HEAD,
@@ -339,7 +339,7 @@ impl Inflater {
         self.reset_keep();
     }
 
-    pub fn prime(&mut self, bits: int, value: u32) {
+    pub fn prime(&mut self, bits: isize, value: u32) {
         if bits < 0 {
             self.hold = 0;
             self.bits = 0;
@@ -347,11 +347,11 @@ impl Inflater {
         }
 
         assert!(bits <= 16);
-        assert!(self.bits as int + bits <= 32);
+        assert!(self.bits as isize + bits <= 32);
 
-        let val = value & (1 << bits as uint) - 1;
+        let val = value & (1 << bits as usize) - 1;
         self.hold += val << self.bits;
-        self.bits += bits as uint;
+        self.bits += bits as usize;
     }
 
     pub fn inflate(
@@ -426,10 +426,10 @@ impl Inflater {
             loc.state.strm.adler = updated_check;
             loc.state.check = updated_check;
         }
-        loc.state.strm.data_type = loc.state.bits
-            + (if loc.state.last { 64 } else { 0 })
-            + (if loc.state.mode as u32 == InflateMode::TYPE as u32 { 128 } else { 0 })
-            + (if loc.state.mode as u32 == InflateMode::LEN_ as u32 || loc.state.mode as u32 == InflateMode::COPY_ as u32 { 256 } else { 0 });
+        loc.state.strm.data_type = (loc.state.bits as u32)
+            | (if loc.state.last { 64 } else { 0 })
+            | (if loc.state.mode == InflateMode::TYPE { 128 } else { 0 })
+            | (if loc.state.mode == InflateMode::LEN_ || loc.state.mode == InflateMode::COPY_ { 256 } else { 0 });
 
     //    if (((loc.in_ == 0 && loc.out == 0) || loc.flush == Z_FINISH) && ret == Z_OK) {
     //        ret = Z_BUF_ERROR;
@@ -443,7 +443,7 @@ impl Inflater {
             InflateResult::Eof(loc.state.check)
         }
         else {
-            warn!("need input, mode = {}", loc.state.mode);
+            warn!("need input, mode = {:?}", loc.state.mode);
             InflateResult::NeedInput
         }
     }
@@ -451,10 +451,10 @@ impl Inflater {
     #[inline(always)] // yes, i'm serious
     fn inflate_main_loop(loc: &mut InflateLocals, flush: Flush) {
 
-        let mut copy: uint;         // number of stored or match bytes to copy
+        let mut copy: usize;         // number of stored or match bytes to copy
         let mut last: Code;         // parent table entry
-        let mut len: uint;          // length to copy for repeats, bits to drop
-        let mut ret: uint;          // return code
+        let mut len: usize;          // length to copy for repeats, bits to drop
+        let mut ret: usize;          // return code
 
         static ORDER: [u16; 19] = /* permutation of code lengths */
             [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
@@ -525,7 +525,7 @@ impl Inflater {
                     BADINPUT!(loc, "unknown compression method");
                 }
                 dropbits(loc, 4);
-                len = (bits(loc, 4) + 8) as uint;
+                len = (bits(loc, 4) + 8) as usize;
                 if loc.state.wbits == 0 {
                     loc.state.wbits = len;
                 }
@@ -616,13 +616,13 @@ impl Inflater {
                 if (loc.state.flags & 0x0400) != 0 {
                     NEEDBITS!(loc, 16);
                     let extra_len = loc.state.hold & 0xffff;
-                    loc.state.length = extra_len as uint;
+                    loc.state.length = extra_len as usize;
 
                     // debug!("EXTRALEN: extra_len = {}", extra_len);
 
                     match loc.state.head {
                         Some(ref mut h) => {
-                            h.extra_len = extra_len as uint;
+                            h.extra_len = extra_len as usize;
                         }
                         _ => ()
                     }
@@ -684,7 +684,7 @@ impl Inflater {
                     }
                     let mut copy = 0;
                     loop {
-                        len = loc.input_buffer[loc.next + copy] as uint;
+                        len = loc.input_buffer[loc.next + copy] as usize;
                         copy += 1;
 
                         /* TODO
@@ -874,7 +874,7 @@ impl Inflater {
                     BADINPUT!(loc, "invalid stored block lengths");
                 }
                 debug!("inflate:       stored length {}", len);
-                loc.state.length = len as uint;
+                loc.state.length = len as usize;
                 initbits(loc);
                 loc.state.mode = InflateMode::COPY_;
                 if flush == Flush::Trees {
@@ -910,9 +910,9 @@ impl Inflater {
 
             InflateMode::TABLE => {
                 NEEDBITS!(loc, 14);
-                loc.state.nlen = bits_and_drop(loc, 5) as uint + 257;
-                loc.state.ndist = bits_and_drop(loc, 5) as uint + 1;
-                loc.state.ncode = bits_and_drop(loc, 4) as uint + 4;
+                loc.state.nlen = bits_and_drop(loc, 5) as usize + 257;
+                loc.state.ndist = bits_and_drop(loc, 5) as usize + 1;
+                loc.state.ncode = bits_and_drop(loc, 4) as usize + 4;
                 // debug!("TABLE: nlen {} ndist {} ncode {}", loc.state.nlen, loc.state.ndist, loc.state.ncode);
     // #ifndef PKZIP_BUG_WORKAROUND
                 if loc.state.nlen > 286 || loc.state.ndist > 30 {
@@ -929,14 +929,14 @@ impl Inflater {
                 while loc.state.have < loc.state.ncode {
                     NEEDBITS!(loc, 3);
                     let lenlen = bits(loc, 3);
-                    let lenindex = ORDER[loc.state.have] as uint;
+                    let lenindex = ORDER[loc.state.have] as usize;
                     // debug!("    lens[{}] := {}", lenindex , lenlen);
                     loc.state.lens[lenindex ] = lenlen as u16;
                     loc.state.have += 1;
                     dropbits(loc, 3);
                 }
                 while loc.state.have < 19 {
-                    let lenindex = ORDER[loc.state.have] as uint;
+                    let lenindex = ORDER[loc.state.have] as usize;
                     // debug!("clearing {}", lenindex);
                     loc.state.lens[lenindex] = 0;
                     loc.state.have += 1;
@@ -947,7 +947,7 @@ impl Inflater {
                 loc.state.lenbits = 7;
                 let (inflate_ret, inflate_bits) = inflate_table(CODES, &loc.state.lens, 19, &mut loc.state.codes, &mut loc.state.next,
                     loc.state.lenbits, loc.state.work.as_mut_slice());
-                ret = inflate_ret as uint;
+                ret = inflate_ret as usize;
                 loc.state.lenbits = inflate_bits;
                 if ret != 0 {
                     BADINPUT!(loc, "invalid code lengths set");
@@ -959,32 +959,32 @@ impl Inflater {
             InflateMode::CODELENS => {
                 while loc.state.have < loc.state.nlen + loc.state.ndist {
                     let mut here: Code; // current decoding table entry
-                    while { here = loc.state.codes[loc.state.lencode + bits(loc, loc.state.lenbits) as uint]; here.bits as uint > loc.bits } {
+                    while { here = loc.state.codes[loc.state.lencode + bits(loc, loc.state.lenbits) as usize]; here.bits as usize > loc.bits } {
                         PULLBYTE!(loc);
                     }
                     if here.val < 16 {
-                        dropbits(loc, here.bits as uint);
+                        dropbits(loc, here.bits as usize);
                         loc.state.lens[loc.state.have] = here.val;
                         loc.state.have += 1;
                     }
                     else {
                         let (len, copy) = if here.val == 16 {
-                            NEEDBITS!(loc, here.bits as uint + 2);
-                            dropbits(loc, here.bits as uint);
+                            NEEDBITS!(loc, here.bits as usize + 2);
+                            dropbits(loc, here.bits as usize);
                             if loc.state.have == 0 {
                                 BADINPUT!(loc, "invalid bit length repeat");
                             }
-                            (loc.state.lens[loc.state.have as uint - 1], 3 + bits_and_drop(loc, 2) as uint)
+                            (loc.state.lens[loc.state.have as usize - 1], 3 + bits_and_drop(loc, 2) as usize)
                         }
                         else if here.val == 17 {
-                            NEEDBITS!(loc, here.bits as uint + 3);
-                            dropbits(loc, here.bits as uint);
-                            (0, 3 + bits_and_drop(loc, 3) as uint)
+                            NEEDBITS!(loc, here.bits as usize + 3);
+                            dropbits(loc, here.bits as usize);
+                            (0, 3 + bits_and_drop(loc, 3) as usize)
                         }
                         else {
-                            NEEDBITS!(loc, here.bits as uint + 7);
-                            dropbits(loc, here.bits as uint);
-                            (0, 11 + bits_and_drop(loc, 7) as uint)
+                            NEEDBITS!(loc, here.bits as usize + 7);
+                            dropbits(loc, here.bits as usize);
+                            (0, 11 + bits_and_drop(loc, 7) as usize)
                         };
                         if loc.state.have + copy > loc.state.nlen + loc.state.ndist {
                             BADINPUT!(loc, "invalid bit length repeat");
@@ -1011,7 +1011,7 @@ impl Inflater {
                 let (inflate_result, inflate_bits) = inflate_table(
                     LENS, loc.state.lens.as_slice(), loc.state.nlen, &mut loc.state.codes, &mut loc.state.next,
                                     loc.state.lenbits, loc.state.work.as_mut_slice());
-                ret = inflate_result as uint;
+                ret = inflate_result as usize;
                 loc.state.lenbits = inflate_bits;
                 if ret != 0 {
                     BADINPUT!(loc, "invalid literal/lengths set");
@@ -1065,8 +1065,8 @@ impl Inflater {
                     loc.state.back = 0;
                     let mut here: Code;         // current decoding table entry
                     loop {
-                        here = loc.state.codes[loc.state.lencode + bits(loc, loc.state.lenbits) as uint];
-                        if here.bits as uint <= loc.bits as uint {
+                        here = loc.state.codes[loc.state.lencode + bits(loc, loc.state.lenbits) as usize];
+                        if here.bits as usize <= loc.bits as usize {
                             break;
                         }
                         PULLBYTE!(loc);
@@ -1074,18 +1074,18 @@ impl Inflater {
                     if here.op != 0 && (here.op & 0xf0) == 0 {
                         last = here;
                         loop {
-                            here = loc.state.codes[loc.state.lencode + last.val as uint + (bits(loc, last.bits as uint + last.op as uint) as uint >> last.bits as uint)];
-                            if (last.bits as uint + here.bits as uint) <= loc.bits {
+                            here = loc.state.codes[loc.state.lencode + last.val as usize + (bits(loc, last.bits as usize + last.op as usize) as usize >> last.bits as usize)];
+                            if (last.bits as usize + here.bits as usize) <= loc.bits {
                                 break;
                             }
                             PULLBYTE!(loc);
                         }
-                        dropbits(loc, last.bits as uint);
-                        loc.state.back += last.bits as uint;
+                        dropbits(loc, last.bits as usize);
+                        loc.state.back += last.bits as usize;
                     }
-                    dropbits(loc, here.bits as uint);
-                    loc.state.back += here.bits as uint;
-                    loc.state.length = here.val as uint;
+                    dropbits(loc, here.bits as usize);
+                    loc.state.back += here.bits as usize;
+                    loc.state.length = here.val as usize;
                     if here.op == 0 {
                         if here.val >= 0x20 && here.val < 0x7f {
                             debug!("inflate:         literal '{}'", here.val as u8 as char);
@@ -1105,7 +1105,7 @@ impl Inflater {
                     if (here.op & 64) != 0 {
                         BADINPUT!(loc, "invalid literal/length code");
                     }
-                    loc.state.extra = (here.op & 15) as uint;
+                    loc.state.extra = (here.op & 15) as usize;
                     goto_mode!(loc, LENEXT);
                 }
             }
@@ -1114,7 +1114,7 @@ impl Inflater {
                 debug!("LENEXT: extra={}", loc.state.extra);
                 if loc.state.extra != 0 {
                     NEEDBITS!(loc, loc.state.extra);
-                    loc.state.length += bits(loc, loc.state.extra as uint) as uint;
+                    loc.state.length += bits(loc, loc.state.extra as usize) as usize;
                     let extra = loc.state.extra;
                     dropbits(loc, extra);
                     loc.state.back += loc.state.extra;
@@ -1127,8 +1127,8 @@ impl Inflater {
             InflateMode::DIST => {
                 let mut here: Code;         // current decoding table entry
                 loop {
-                    here = loc.state.codes[loc.state.distcode as uint + bits(loc, loc.state.distbits) as uint];
-                    if here.bits as uint <= loc.bits {
+                    here = loc.state.codes[loc.state.distcode as usize + bits(loc, loc.state.distbits) as usize];
+                    if here.bits as usize <= loc.bits {
                         break;
                     }
                     PULLBYTE!(loc);
@@ -1136,29 +1136,29 @@ impl Inflater {
                 if (here.op & 0xf0) == 0 {
                     last = here;
                     loop {
-                        here = loc.state.codes[loc.state.distcode + last.val as uint + (bits(loc, last.bits as uint + last.op as uint) >> last.bits as uint) as uint];
-                        if (last.bits as uint + here.bits as uint) <= loc.bits as uint {
+                        here = loc.state.codes[loc.state.distcode + last.val as usize + (bits(loc, last.bits as usize + last.op as usize) >> last.bits as usize) as usize];
+                        if (last.bits as usize + here.bits as usize) <= loc.bits as usize {
                             break;
                         }
                         PULLBYTE!(loc);
                     }
-                    dropbits(loc, last.bits as uint);
-                    loc.state.back += last.bits as uint;
+                    dropbits(loc, last.bits as usize);
+                    loc.state.back += last.bits as usize;
                 }
-                dropbits(loc, here.bits as uint);
-                loc.state.back += here.bits as uint;
+                dropbits(loc, here.bits as usize);
+                loc.state.back += here.bits as usize;
                 if (here.op & 64) != 0 {
                     BADINPUT!(loc, "invalid distance code");
                 }
-                loc.state.offset = here.val as uint;
-                loc.state.extra = (here.op & 15) as uint;
+                loc.state.offset = here.val as usize;
+                loc.state.extra = (here.op & 15) as usize;
                 goto_mode!(loc, DISTEXT);
             }
 
             InflateMode::DISTEXT => {
                 if loc.state.extra != 0 {
                     NEEDBITS!(loc, loc.state.extra);
-                    loc.state.offset += bits(loc, loc.state.extra) as uint;
+                    loc.state.offset += bits(loc, loc.state.extra) as usize;
                     let extra = loc.state.extra;
                     dropbits(loc, extra);
                     loc.state.back += loc.state.extra;
@@ -1270,7 +1270,7 @@ impl Inflater {
             }
 
             InflateMode::CHECK => {
-                // let mut from: uint; // index into loc.input_buffer
+                // let mut from: usize; // index into loc.input_buffer
                 if loc.state.wrap != 0 {
                     NEEDBITS!(loc, 32);
                     loc.state.strm.total_out += loc.put as u64;
@@ -1341,7 +1341,7 @@ impl Inflater {
             */
 
                 _ => {
-                    warn!("unimplemented mode: {}", loc.state.mode);
+                    warn!("unimplemented mode: {:?}", loc.state.mode);
                     unimplemented!();
                 }
             }
@@ -1366,24 +1366,24 @@ impl Inflater {
 
         /* literal/length table */
         {
-            let mut sym :uint = 0;
+            let mut sym :usize = 0;
             while sym < 144 { self.lens[sym] = 8; sym += 1; }
             while sym < 256 { self.lens[sym] = 9; sym += 1; }
             while sym < 280 { self.lens[sym] = 7; sym += 1; }
             while sym < 288 { self.lens[sym] = 8; sym += 1; }
         }
 
-        let mut next :uint = 0;     // index into 'fixed' table
-        let lenfix: uint = 0;       // index into 'fixed' table
+        let mut next :usize = 0;     // index into 'fixed' table
+        let lenfix: usize = 0;       // index into 'fixed' table
         let (err, bits) = inflate_table(LENS, &self.lens, 288, &mut fixed, &mut next, 9, self.work.as_mut_slice());
         assert!(err == 0);
 
         /* distance table */
         {
-            let mut sym :uint = 0;
+            let mut sym :usize = 0;
             while sym < 32 { self.lens[sym] = 5; sym += 1; }
         }
-        let distfix: uint = next;      // index into 'fixed' table
+        let distfix: usize = next;      // index into 'fixed' table
 
         let (err, bits) = inflate_table(DISTS, &self.lens, 32, &mut fixed, &mut next, 5, self.work.as_mut_slice());
         assert!(err == 0);
@@ -1435,11 +1435,11 @@ impl Inflater {
 //          and so which is now available to copy into the window
 //
 #[inline]
-fn updatewindow(loc: &mut InflateLocals, end: uint, copy: uint) {
+fn updatewindow(loc: &mut InflateLocals, end: usize, copy: usize) {
     debug!("updatewindow: copy={}", copy);
 
     let mut copy = copy;
-    let mut dist: uint;
+    let mut dist: usize;
 
     /* if it hasn't been done already, allocate space for the window */
 
@@ -1569,7 +1569,7 @@ fn initbits(loc: &mut InflateLocals) {
 /* Return the low n bits of the bit accumulator (n < 16) */
 // was 'BITS'
 #[inline]
-fn bits(loc: &InflateLocals, n: uint) -> u32
+fn bits(loc: &InflateLocals, n: usize) -> u32
 {
     loc.hold & ((1 << n) - 1)
 }
@@ -1584,14 +1584,14 @@ fn bitbool(loc: &InflateLocals) -> bool
 /* Remove n bits from the bit accumulator */
 // was 'DROPBITS'
 #[inline]
-fn dropbits(loc: &mut InflateLocals, n: uint)
+fn dropbits(loc: &mut InflateLocals, n: usize)
 {
     loc.hold >>= n;
     loc.bits -= n;
 }
 
 #[inline]
-fn bits_and_drop(loc: &mut InflateLocals, n: uint) -> u32
+fn bits_and_drop(loc: &mut InflateLocals, n: usize) -> u32
 {
     let v = bits(loc, n);
     dropbits(loc, n);
@@ -1695,9 +1695,9 @@ struct InflateLocals<'a>
     output_buffer: &'a mut[u8],
 
     hold: u32,          // bit buffer
-    bits: uint,         // bits in bit buffer
-    next: uint,         // next input; is an index into input_buffer
-    put: uint,          // next output; is an index into output_buffer
+    bits: usize,         // bits in bit buffer
+    next: usize,         // next input; is an index into input_buffer
+    put: usize,          // next output; is an index into output_buffer
 
     flush: Flush,
 
@@ -1706,24 +1706,24 @@ struct InflateLocals<'a>
 
 impl<'a> InflateLocals<'a> {
     #[inline]
-    pub fn avail_out(&self) -> uint {
+    pub fn avail_out(&self) -> usize {
         assert!(self.put <= self.output_buffer.len());
         self.output_buffer.len() - self.put
     }
 
     #[inline]
-    pub fn avail_in(&self) -> uint {
+    pub fn avail_in(&self) -> usize {
         assert!(self.next <= self.input_buffer.len());
         self.input_buffer.len() - self.next
     }
 
     #[inline]
-    pub fn left(&self) -> uint {
+    pub fn left(&self) -> usize {
         self.output_buffer.len() - self.put
     }
 
     #[inline]
-    pub fn have(&self) -> uint {
+    pub fn have(&self) -> usize {
         self.input_buffer.len() - self.next
     }
 }

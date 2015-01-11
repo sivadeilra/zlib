@@ -52,9 +52,9 @@ pub struct Code {
 // inflate_table() calls in inflate.c and infback.c.  If the root table size is
 // changed, then these maximum sizes would be need to be recalculated and
 // updated.
-pub const ENOUGH_LENS :uint = 852;
-pub const ENOUGH_DISTS :uint = 592;
-pub const ENOUGH :uint = ENOUGH_LENS + ENOUGH_DISTS;
+pub const ENOUGH_LENS :usize = 852;
+pub const ENOUGH_DISTS :usize = 592;
+pub const ENOUGH :usize = ENOUGH_LENS + ENOUGH_DISTS;
 
 /* Type of code to build for inflate_table() */
 // enum codetype {
@@ -68,7 +68,7 @@ pub type CodeType = u8;
 // Copyright (C) 1995-2013 Mark Adler
 // For conditions of distribution and use, see copyright notice in zlib.h
 
-pub const MAXBITS :uint = 15;
+pub const MAXBITS :usize = 15;
 
 // const char inflate_copyright[] =
 //    " inflate 1.2.8 Copyright 1995-2013 Mark Adler ";
@@ -95,12 +95,12 @@ pub const MAXBITS :uint = 15;
 pub fn inflate_table(
     ctype: CodeType,
     lens: &[u16],
-    codes: uint,
+    codes: usize,
     table: &mut [Code],
-    table_pos: &mut uint,       // index into 'table'
-    bits: uint,
+    table_pos: &mut usize,       // index into 'table'
+    bits: usize,
     work: &mut [u16])
-    -> (int /*error*/, uint /*bits*/)
+    -> (isize /*error*/, usize /*bits*/)
 {
     // debug!("inflate_table: ctype {}, codes {}, bits {}", ctype as u32, codes, bits);
     static LBASE :[u16; 31] = [ /* Length codes 257..285 base */
@@ -152,7 +152,7 @@ pub fn inflate_table(
     // accumulate lengths for codes (assumes lens[] all in 0..MAXBITS)
     let mut count = [0u16; MAXBITS+1]; // number of codes of each length
     for sym in range(0, codes) {
-        count[lens[sym] as uint] += 1;
+        count[lens[sym] as usize] += 1;
     }
 
     // debug!("counts:");
@@ -161,7 +161,7 @@ pub fn inflate_table(
     // }
 
     // bound code lengths, force root to be within code lengths
-    let mut max :uint = MAXBITS;      // maximum code lengths
+    let mut max :usize = MAXBITS;      // maximum code lengths
     while max >= 1 {
         if count[max] != 0 {
             break;
@@ -179,7 +179,7 @@ pub fn inflate_table(
         return (0, 1);     /* no symbols, but wait for decoding to report error */
     }
 
-    let mut min :uint = 1; // minimum code length
+    let mut min :usize = 1; // minimum code length
     while min < max {
         if count[min] != 0 {
             break;
@@ -187,7 +187,7 @@ pub fn inflate_table(
         min += 1;
     }
 
-    let mut root :uint = bits;      // number of index bits for root table
+    let mut root :usize = bits;      // number of index bits for root table
     if root > max {
         root = max;
     }
@@ -223,9 +223,9 @@ pub fn inflate_table(
 
     // sort symbols by length, by symbol order within each length
     for sym in range(0u16, codes as u16) {
-        let symlen = lens[sym as uint] as uint;
+        let symlen = lens[sym as usize] as usize;
         if symlen != 0 {
-            let symoff = offs[symlen] as uint;
+            let symoff = offs[symlen] as usize;
             work[symoff] = sym;
             offs[symlen] += 1;
         }
@@ -268,16 +268,16 @@ pub fn inflate_table(
         extra_bias,         // offset into 'extra' to use, can be negative
         end)                // use base and extra for symbol > end
         = match ctype {
-        CODES => (EMPTY_U16.as_slice(), 0, EMPTY_U16.as_slice(), 0, 19),    // base/extra not used
-        LENS => (LBASE.as_slice(), -257, LEXT.as_slice(), -257, 256),
-        _ /* DISTS */ => (DBASE.as_slice(), 0, DEXT.as_slice(), 0, -1)
+        CODES => (&EMPTY_U16[], 0, &EMPTY_U16[], 0, 19),    // base/extra not used
+        LENS => (&LBASE[], -257, &LEXT[], -257, 256),
+        _ /* DISTS */ => (&DBASE[], 0, &DEXT[], 0, -1)
     };
 
     // debug!("base.len = {}, extra.len = {}", base.len(), extra.len());
 
     // initialize state for loop
-    let mut used :uint = 1 << root;     // code entries in table used; use root table entries
-    let mask :uint = used - 1;          // mask for comparing low root bits
+    let mut used :usize = 1 << root;     // code entries in table used; use root table entries
+    let mask :usize = used - 1;          // mask for comparing low root bits
 
     // check available table space
     if (ctype == LENS && used > ENOUGH_LENS) ||
@@ -286,25 +286,25 @@ pub fn inflate_table(
         return (1, bits);
     }
 
-    let mut huff :uint = 0;             // starting Huffman code
-    let mut sym :uint = 0;              // index of code symbols; starting code symbol
-    let mut len :uint = min;            // starting code length, in bits
-    let mut next :uint = *table_pos;    // next available space in 'table'; current table to fill in
-    let mut curr :uint = root;          // number of index bits for current table; current table index bits
-    let mut drop :uint = 0;             // code bits to drop for sub-table; current bits to drop from code for index
-    let mut low :uint = !0u;            // low bits for current root entry; trigger new sub-table when len > root
+    let mut huff: usize = 0;             // starting Huffman code
+    let mut sym: usize = 0;              // index of code symbols; starting code symbol
+    let mut len: usize = min;            // starting code length, in bits
+    let mut next: usize = *table_pos;    // next available space in 'table'; current table to fill in
+    let mut curr: usize = root;          // number of index bits for current table; current table index bits
+    let mut drop: usize = 0;             // code bits to drop for sub-table; current bits to drop from code for index
+    let mut low: usize = !0us;           // low bits for current root entry; trigger new sub-table when len > root
 
     // process all codes and make table entries
     // debug!("processing codes");
     loop {
         /* create table entry */
         let (here_op, here_val) =
-            if (work[sym] as int) < end {
+            if (work[sym] as isize) < end {
                 (0, work[sym])
             }
-            else if (work[sym] as int) > end {
-                (extra[(extra_bias + work[sym] as int) as uint] as u8,
-                    base[(base_bias + work[sym] as int) as uint])
+            else if (work[sym] as isize) > end {
+                (extra[(extra_bias + work[sym] as isize) as usize] as u8,
+                    base[(base_bias + work[sym] as isize) as usize])
             }
             else {
                 (32 + 64, 0)         /* end of block */
@@ -317,8 +317,8 @@ pub fn inflate_table(
 
         /* replicate for those indices with low len bits equal to huff */
         {
-            let incr :uint = 1 << (len - drop);
-            let mut fill :uint = 1 << curr;     // index for replicating entries
+            let incr :usize = 1 << (len - drop);
+            let mut fill :usize = 1 << curr;     // index for replicating entries
             min = fill;                 /* save offset to next table */
             loop {
                 fill -= incr;
@@ -349,7 +349,7 @@ pub fn inflate_table(
             if len == max {
                 break;
             }
-            len = lens[work[sym] as uint] as uint;
+            len = lens[work[sym] as usize] as usize;
         }
 
         /* create new sub-table if needed */
@@ -364,9 +364,9 @@ pub fn inflate_table(
 
             /* determine length of next table */
             curr = len - drop;
-            let mut left :int = 1 << curr;
+            let mut left :isize = 1 << curr;
             while curr + drop < max {
-                left -= count[curr + drop] as int;
+                left -= count[curr + drop] as isize;
                 if left <= 0 {
                     break;
                 }
