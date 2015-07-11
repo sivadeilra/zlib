@@ -3,6 +3,8 @@
 name = "zlib"
 version = "0.0.2"
 authors = ["Arlie Davis <arlie.davis@gmail.com>"]
+repository = "https://github.com/sivadeilra/zlib"
+keywords = ["zip", "compress", "decomress"]
 
 build = "build.rs"
 
