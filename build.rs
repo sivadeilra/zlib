@@ -76,22 +76,22 @@ use super::inftrees::Code;
 ").unwrap();
 
     let size = 1 << 9;
-    w.write_str(format!("pub static LENFIX: [Code; {}] = [\n", size).as_slice()).unwrap();
+    writeln!(w, "pub static LENFIX: [Code; {}] = [", size).unwrap();
     for low in range(0, size) {
-        w.write_str(format!("    Code {{ op: 0x{:02x}, bits: {:2}, val: 0x{:04x} }},\n", 
+        writeln!(w, "    Code {{ op: 0x{:02x}, bits: {:2}, val: 0x{:04x} }},", 
             if (low & 127) == 99 { 64 } else { lencode[low].op },
                 lencode[low].bits,
-                lencode[low].val).as_slice()).unwrap();
+                lencode[low].val).unwrap();
     }
     w.write_str("];\n\n").unwrap();
 
     let size = 1 << 5;
-    w.write_str(format!("pub static DISTFIX: [Code; {}] = [\n", size).as_slice()).unwrap();
+    writeln!(w, "pub static DISTFIX: [Code; {}] = [", size).unwrap();
     for low in range(0, size) {
-        w.write_str(format!("    Code {{ op: 0x{:02x}, bits: {:2}, val: 0x{:04x} }},\n",
+        writeln!(w, "    Code {{ op: 0x{:02x}, bits: {:2}, val: 0x{:04x} }},",
             distcode[low].op,
             distcode[low].bits,
-            distcode[low].val).as_slice()).unwrap();
+            distcode[low].val).unwrap();
     }
     w.write_str("];\n").unwrap();
 }
